@@ -20,6 +20,8 @@ import DocumentManagementModule, {
   DocumentsView,
 } from "./components/DocumentsView";
 import { UploadDocumentView } from "./components/UploadDocumentView";
+import { DocumentVersionUploadModal } from "./components/DocumentVersionUploadModal";
+import { TasksView } from "./components/TasksView";
 
 // Helper function to dynamically generate route slugs
 const createReportConfig = (title, index) => {
@@ -217,6 +219,26 @@ function App() {
                 // <RequireAdmin>
                 <div className="mt-12 ml-2">
                   <DocumentManagementModule />
+                </div>
+                // </RequireAdmin>
+              }
+            />
+            <Route
+              path="documents-version-upload"
+              element={
+                // <RequireAdmin>
+                <div className="mt-12 ml-2">
+                  <DocumentVersionUploadModal />
+                </div>
+                // </RequireAdmin>
+              }
+            />
+            <Route
+              path="tasks-view"
+              element={
+                // <RequireAdmin>
+                <div className="mt-12 ml-2">
+                  <TasksView />
                 </div>
                 // </RequireAdmin>
               }

@@ -765,7 +765,7 @@ export default function ManageRoleScreen() {
                             </td>
                             <td className="px-3 py-1.5 text-center">
                               <span
-                                className={`px-2 py-0.5 text-[9px] font-bold rounded-full uppercase tracking-wider ${
+                                className={`px-2 py-0.5 text-[9px] font-bold rounded-full  tracking-wider ${
                                   rep.type === "Screen"
                                     ? "bg-purple-50 text-purple-700 border border-purple-200"
                                     : "bg-blue-50 text-blue-700 border border-blue-200"

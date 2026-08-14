@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Plus,
   MoreVertical,
@@ -31,119 +31,117 @@ import {
   Link2,
   Check,
   AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  ZoomOut,
+  ZoomIn,
 } from "lucide-react";
 import { UploadDocumentView } from "./UploadDocumentView";
+import { DocumentVersionUploadModal } from "./DocumentVersionUploadModal";
+import { PdfViewer } from "./PdfViewer";
 
-// ==========================================
-// SAMPLE DATASET
-// ==========================================
-const mockDocuments = [
-  {
-    id: "1",
-    title: "Information Security Policy",
-    number: "POL-IS-001",
-    type: "Policy",
-    status: "Published",
-    statusColor: "bg-emerald-100 text-emerald-800",
-    version: "2.0",
-    owner: "John Smith",
-    date: "08 May 2024",
-    category: "Information Security",
-    department: "IT",
-    effectiveDate: "01 Apr 2024",
-    reviewDate: "01 Apr 2025",
-    classification: "Confidential",
-    retention: "7 Years",
-    workflow: "Policy Approval Workflow",
-    createdOn: "15 Mar 2024",
+import samplePdf from "../assets/DeltekCostpoint82ExtensibilityDesignerCodingGuide.pdf";
+
+// Lookup Mappings for API numeric/string fields to UI displays
+const DOCUMENT_TYPES_MAP = {
+  1: "Policy",
+  2: "Procedure",
+  3: "Form",
+  4: "Plan",
+  5: "Contract",
+};
+
+const CATEGORY_MAP = {
+  1: "Procurement",
+  2: "Information Security",
+  3: "Compliance",
+  4: "Human Resources",
+  5: "Risk Management",
+};
+
+const CLASSIFICATION_MAP = {
+  1: "Confidential",
+  2: "Internal",
+  3: "Restricted",
+  4: "Public",
+};
+
+const DEPARTMENT_MAP = {
+  1: "IT",
+  2: "Operations",
+  3: "Legal",
+  4: "HR",
+  5: "Executive",
+};
+
+const STATUS_COLOR_MAP = {
+  DRAFT: "bg-slate-100 text-slate-700",
+  Draft: "bg-slate-100 text-slate-700",
+  PUBLISHED: "bg-emerald-100 text-emerald-800",
+  Published: "bg-emerald-100 text-emerald-800",
+  "IN REVIEW": "bg-amber-100 text-amber-800",
+  "In Review": "bg-amber-100 text-amber-800",
+  "PENDING APPROVAL": "bg-purple-100 text-purple-800",
+  "Pending Approval": "bg-purple-100 text-purple-800",
+};
+
+/**
+ * Maps incoming API objects to the structure expected by UI components.
+ */
+function mapApiDocumentToUI(doc) {
+  // Extract latest version if available
+  const latestVersion =
+    doc.versions && doc.versions.length > 0
+      ? doc.versions[doc.versions.length - 1]
+      : null;
+
+  // Formatting dates cleanly (YYYY-MM-DD to DD MMM YYYY or local string)
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "N/A";
+    const date = new Date(dateStr);
+    return isNaN(date.getTime())
+      ? dateStr
+      : date.toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        });
+  };
+
+  const statusFormatted = doc.status
+    ? doc.status.charAt(0).toUpperCase() + doc.status.slice(1).toLowerCase()
+    : "Draft";
+
+  return {
+    id: String(doc.documentId),
+    title: doc.title || "Untitled Document",
+    number: doc.documentNo || `DOC-${doc.documentId}`,
+    type: DOCUMENT_TYPES_MAP[doc.documentTypeId] || "Policy",
+    status: statusFormatted,
+    fileUrl: latestVersion?.fileUrl || samplePdf,
+    totalPages: latestVersion?.totalPages || 1,
+    statusColor:
+      STATUS_COLOR_MAP[doc.status] ||
+      STATUS_COLOR_MAP[statusFormatted] ||
+      "bg-slate-100 text-slate-700",
+    version: latestVersion?.versionNumber || "1.0",
+    owner: doc.ownerName || `User #${doc.ownerUserId || doc.createdBy || "1"}`,
+    date: formatDate(doc.createdAt),
+    category: CATEGORY_MAP[doc.categoryId] || "General",
+    department: DEPARTMENT_MAP[doc.departmentId] || "IT",
+    effectiveDate: formatDate(doc.effectiveDate),
+    reviewDate: formatDate(doc.nextReviewDate),
+    classification: CLASSIFICATION_MAP[doc.classificationId] || "Internal",
+    retention: doc.retentionPolicyId
+      ? `${doc.retentionPolicyId} Years`
+      : "Standard",
+    workflow: "Standard Review Workflow",
+    createdOn: formatDate(doc.createdAt),
     description:
-      "Defines organizational security requirements for information systems, cloud assets, and endpoints.",
-  },
-  {
-    id: "2",
-    title: "Vendor Management Procedure",
-    number: "PRC-VN-002",
-    type: "Procedure",
-    status: "In Review",
-    statusColor: "bg-amber-100 text-amber-800",
-    version: "1.1",
-    owner: "Sarah Johnson",
-    date: "07 May 2024",
-    category: "Procurement",
-    department: "Operations",
-    effectiveDate: "10 Apr 2024",
-    reviewDate: "10 Apr 2025",
-    classification: "Internal",
-    retention: "5 Years",
-    workflow: "Procedure Review Workflow",
-    createdOn: "20 Mar 2024",
-    description:
-      "Outlines vendor onboarding, due diligence, background screening, and periodic performance evaluations.",
-  },
-  {
-    id: "3",
-    title: "Data Privacy Policy",
-    number: "POL-DP-003",
-    type: "Policy",
-    status: "Published",
-    statusColor: "bg-emerald-100 text-emerald-800",
-    version: "3.0",
-    owner: "Michael Brown",
-    date: "05 May 2024",
-    category: "Compliance",
-    department: "Legal",
-    effectiveDate: "15 Jan 2024",
-    reviewDate: "15 Jan 2025",
-    classification: "Restricted",
-    retention: "10 Years",
-    workflow: "Legal Approval Workflow",
-    createdOn: "01 Jan 2024",
-    description:
-      "Ensures processing of personal data complies with GDPR, CCPA, and enterprise privacy standards.",
-  },
-  {
-    id: "4",
-    title: "Employee Onboarding Checklist",
-    number: "FRM-HR-004",
-    type: "Form",
-    status: "Draft",
-    statusColor: "bg-slate-100 text-slate-700",
-    version: "0.3",
-    owner: "Emily Davis",
-    date: "04 May 2024",
-    category: "Human Resources",
-    department: "HR",
-    effectiveDate: "N/A",
-    reviewDate: "N/A",
-    classification: "Internal",
-    retention: "3 Years",
-    workflow: "HR Form Draft",
-    createdOn: "28 Apr 2024",
-    description:
-      "Standard checklist for IT provisioning, background checks, and HR orientation.",
-  },
-  {
-    id: "5",
-    title: "Business Continuity Plan",
-    number: "PLN-BC-005",
-    type: "Plan",
-    status: "Pending Approval",
-    statusColor: "bg-purple-100 text-purple-800",
-    version: "1.0",
-    owner: "David Wilson",
-    date: "02 May 2024",
-    category: "Risk Management",
-    department: "Executive",
-    effectiveDate: "01 May 2024",
-    reviewDate: "01 May 2025",
-    classification: "Confidential",
-    retention: "Permanent",
-    workflow: "Executive Sign-off",
-    createdOn: "10 Apr 2024",
-    description:
-      "Disaster recovery scenarios and operational failover procedures during critical incidents.",
-  },
-];
+      doc.description ||
+      `Document reference ${doc.documentNo} under ${CATEGORY_MAP[doc.categoryId] || "General"}.`,
+  };
+}
 
 // Metadata configuration for Upload Wizard
 const DOCUMENT_TYPES_CONFIG = {
@@ -352,7 +350,13 @@ function WorkflowStep({ label, name, date, completed, active, pending }) {
 // ==========================================
 // 1. MAIN DOCUMENTS VIEW
 // ==========================================
-export function DocumentsView({ onSelectDoc, onNavigateToUpload }) {
+export function DocumentsView({
+  documents = [],
+  isLoading = false,
+  error = null,
+  onSelectDoc,
+  onNavigateToUpload,
+}) {
   const [activeTab, setActiveTab] = useState("All Documents");
   const [search, setSearch] = useState("");
   const [selectedType, setSelectedType] = useState("All");
@@ -360,11 +364,17 @@ export function DocumentsView({ onSelectDoc, onNavigateToUpload }) {
   const [selectedOwner, setSelectedOwner] = useState("All");
 
   const filteredDocs = useMemo(() => {
-    return mockDocuments.filter((doc) => {
-      if (activeTab === "Drafts" && doc.status !== "Draft") return false;
-      if (activeTab === "Published" && doc.status !== "Published") return false;
-      if (activeTab === "Archived" && doc.status !== "Archived") return false;
-      if (activeTab === "Superseded" && doc.status !== "Superseded")
+    return documents.filter((doc) => {
+      if (activeTab === "Drafts" && doc.status.toLowerCase() !== "draft")
+        return false;
+      if (activeTab === "Published" && doc.status.toLowerCase() !== "published")
+        return false;
+      if (activeTab === "Archived" && doc.status.toLowerCase() !== "archived")
+        return false;
+      if (
+        activeTab === "Superseded" &&
+        doc.status.toLowerCase() !== "superseded"
+      )
         return false;
 
       const matchesSearch =
@@ -373,20 +383,29 @@ export function DocumentsView({ onSelectDoc, onNavigateToUpload }) {
       if (!matchesSearch) return false;
 
       if (selectedType !== "All" && doc.type !== selectedType) return false;
-      if (selectedStatus !== "All" && doc.status !== selectedStatus)
+      if (
+        selectedStatus !== "All" &&
+        doc.status.toLowerCase() !== selectedStatus.toLowerCase()
+      )
         return false;
       if (selectedOwner !== "All" && doc.owner !== selectedOwner) return false;
 
       return true;
     });
-  }, [activeTab, search, selectedType, selectedStatus, selectedOwner]);
+  }, [
+    documents,
+    activeTab,
+    search,
+    selectedType,
+    selectedStatus,
+    selectedOwner,
+  ]);
 
   return (
     <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-5 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-slate-800">Documents</h1>
         <div className="flex items-center gap-2">
-          {/* Action to trigger route/view change */}
           <button
             onClick={onNavigateToUpload}
             className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 rounded-md font-medium flex items-center gap-1 cursor-pointer transition-colors"
@@ -439,6 +458,7 @@ export function DocumentsView({ onSelectDoc, onNavigateToUpload }) {
             <option value="Procedure">Procedure</option>
             <option value="Form">Form</option>
             <option value="Plan">Plan</option>
+            <option value="Contract">Contract</option>
           </select>
 
           <select
@@ -459,11 +479,11 @@ export function DocumentsView({ onSelectDoc, onNavigateToUpload }) {
             className="border border-slate-200 rounded px-3 py-1.5 text-slate-600 bg-white"
           >
             <option value="All">All Owners</option>
-            <option value="John Smith">John Smith</option>
-            <option value="Sarah Johnson">Sarah Johnson</option>
-            <option value="Michael Brown">Michael Brown</option>
-            <option value="Emily Davis">Emily Davis</option>
-            <option value="David Wilson">David Wilson</option>
+            {Array.from(new Set(documents.map((d) => d.owner))).map((owner) => (
+              <option key={owner} value={owner}>
+                {owner}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -480,35 +500,43 @@ export function DocumentsView({ onSelectDoc, onNavigateToUpload }) {
         </button>
       </div>
 
-      {/* Table */}
+      {/* Table & Loading/Error States */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs border-collapse">
-          <thead>
-            <tr className="border-b border-slate-200 text-slate-500 bg-slate-50">
-              <th className="p-3">Document Title</th>
-              <th className="p-3">Document Number</th>
-              <th className="p-3">Type</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Version</th>
-              <th className="p-3">Owner</th>
-              <th className="p-3">Modified On</th>
-              <th className="p-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filteredDocs.length > 0 ? (
-              filteredDocs.map((doc) => (
-                <TableRow key={doc.id} doc={doc} onSelect={onSelectDoc} />
-              ))
-            ) : (
-              <tr>
-                <td colSpan={8} className="p-6 text-center text-slate-400">
-                  No matching documents found.
-                </td>
+        {isLoading ? (
+          <div className="p-8 text-center text-slate-500 text-xs">
+            Loading documents from server...
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center text-red-500 text-xs">{error}</div>
+        ) : (
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 text-slate-500 bg-slate-50">
+                <th className="p-3">Document Title</th>
+                <th className="p-3">Document Number</th>
+                <th className="p-3">Type</th>
+                <th className="p-3">Status</th>
+                <th className="p-3">Version</th>
+                <th className="p-3">Owner</th>
+                <th className="p-3">Modified On</th>
+                <th className="p-3 text-right">Actions</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredDocs.length > 0 ? (
+                filteredDocs.map((doc) => (
+                  <TableRow key={doc.id} doc={doc} onSelect={onSelectDoc} />
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={8} className="p-6 text-center text-slate-400">
+                    No matching documents found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
@@ -517,7 +545,7 @@ export function DocumentsView({ onSelectDoc, onNavigateToUpload }) {
 // ==========================================
 // 2. DOCUMENT DETAIL VIEW WITH COMPLETE TABS
 // ==========================================
-export function DocumentDetailView({ doc, onBack }) {
+export function DocumentDetailView({ doc, onBack, onOpenVersionModal }) {
   const [activeTab, setActiveTab] = useState("Overview");
 
   if (!doc) return null;
@@ -544,6 +572,12 @@ export function DocumentDetailView({ doc, onBack }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={onOpenVersionModal}
+            className="border border-blue-600 bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded flex items-center gap-1 font-medium cursor-pointer shadow-sm transition-colors"
+          >
+            <Upload size={14} /> Upload New Version
+          </button>
           <button
             onClick={() => alert(`Downloading ${doc.number}`)}
             className="border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs px-3 py-1.5 rounded flex items-center gap-1 font-medium cursor-pointer"
@@ -593,22 +627,13 @@ export function DocumentDetailView({ doc, onBack }) {
         {activeTab === "Overview" && (
           <div className="space-y-6">
             <div className="grid grid-cols-12 gap-6">
-              {/* Document Preview Frame */}
-              <div className="col-span-12 lg:col-span-5 bg-slate-800 rounded-lg overflow-hidden flex flex-col h-96 shadow-inner">
-                <div className="bg-slate-900 p-6 text-white flex-1 flex flex-col justify-center items-center text-center">
-                  <FileText className="w-12 h-12 text-blue-400 mb-3" />
-                  <h2 className="text-base font-bold tracking-wider mb-2 uppercase">
-                    {doc.title}
-                  </h2>
-                  <p className="text-[11px] text-slate-400 max-w-xs leading-relaxed">
-                    Official document record for {doc.number}. Classification:{" "}
-                    {doc.classification}.
-                  </p>
-                </div>
-                <div className="bg-slate-900 border-t border-slate-700 px-4 py-2 flex items-center justify-between text-xs text-slate-400">
-                  <span>Page 1 / 12</span>
-                  <span>100% Zoom</span>
-                </div>
+              <div className="col-span-12 lg:col-span-5">
+                <PdfViewer
+                  pdfUrl={doc.fileUrl}
+                  docTitle={doc.title}
+                  docNumber={doc.number}
+                  totalPages={doc.totalPages}
+                />
               </div>
 
               {/* Quick Info Grid */}
@@ -698,16 +723,12 @@ export function DocumentDetailView({ doc, onBack }) {
                   Extended Properties
                 </h4>
                 <InfoRow label="Document ID" value={doc.id} />
-                <InfoRow label="System ID" value={`SYS-DOC-${doc.id}0092`} />
+                <InfoRow label="System ID" value={`SYS-DOC-${doc.id}`} />
                 <InfoRow
                   label="File Format"
                   value="PDF (Portable Document Format)"
                 />
                 <InfoRow label="File Size" value="2.4 MB" />
-                <InfoRow
-                  label="Checksum (MD5)"
-                  value="e2c086e9329126a111a95a32"
-                />
               </div>
               <div className="space-y-3">
                 <h4 className="font-bold text-slate-800 border-b pb-1">
@@ -728,9 +749,17 @@ export function DocumentDetailView({ doc, onBack }) {
         {/* VERSIONS TAB */}
         {activeTab === "Versions" && (
           <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-sm text-xs">
-            <h3 className="font-bold text-slate-800 text-sm mb-4">
-              Revision History
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-slate-800 text-sm mb-4">
+                Revision History
+              </h3>
+              <button
+                onClick={onOpenVersionModal}
+                className="border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs px-3 py-1.5 rounded flex items-center gap-1.5 font-semibold cursor-pointer transition-colors"
+              >
+                <Upload size={13} /> Add New Version
+              </button>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
@@ -750,18 +779,7 @@ export function DocumentDetailView({ doc, onBack }) {
                     <td className="p-2.5 text-slate-600">{doc.date}</td>
                     <td className="p-2.5 text-slate-600">{doc.owner}</td>
                     <td className="p-2.5 text-slate-600">
-                      Annual review update and policy refresh.
-                    </td>
-                    <td className="p-2.5 text-right text-blue-600 font-semibold cursor-pointer">
-                      Download
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="p-2.5 font-medium text-slate-700">1.0</td>
-                    <td className="p-2.5 text-slate-600">{doc.createdOn}</td>
-                    <td className="p-2.5 text-slate-600">{doc.owner}</td>
-                    <td className="p-2.5 text-slate-600">
-                      Initial document release and baseline setup.
+                      Document record active.
                     </td>
                     <td className="p-2.5 text-right text-blue-600 font-semibold cursor-pointer">
                       Download
@@ -782,32 +800,6 @@ export function DocumentDetailView({ doc, onBack }) {
             <p className="text-slate-600">
               Current Assigned Scheme: <strong>{doc.workflow}</strong>
             </p>
-            <div className="border border-slate-200 rounded p-4 space-y-3 bg-slate-50">
-              <div className="flex justify-between items-center border-b pb-2">
-                <span className="font-semibold text-slate-700">
-                  Step 1: Author Submission
-                </span>
-                <span className="text-emerald-600 font-bold flex items-center gap-1">
-                  <Check size={14} /> Completed ({doc.createdOn})
-                </span>
-              </div>
-              <div className="flex justify-between items-center border-b pb-2">
-                <span className="font-semibold text-slate-700">
-                  Step 2: Legal & Security Review
-                </span>
-                <span className="text-emerald-600 font-bold flex items-center gap-1">
-                  <Check size={14} /> Approved (20 Mar 2024)
-                </span>
-              </div>
-              <div className="flex justify-between items-center border-b pb-2">
-                <span className="font-semibold text-slate-700">
-                  Step 3: Executive Sign-off
-                </span>
-                <span className="text-blue-600 font-bold">
-                  In Progress (Assigned: David Wilson)
-                </span>
-              </div>
-            </div>
           </div>
         )}
 
@@ -831,17 +823,6 @@ export function DocumentDetailView({ doc, onBack }) {
                   Owner
                 </span>
               </div>
-              <div className="p-3 flex items-center justify-between">
-                <div>
-                  <p className="font-bold text-slate-800">
-                    Department: {doc.department}
-                  </p>
-                  <p className="text-[11px] text-slate-500">Read & Comment</p>
-                </div>
-                <span className="bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded text-[10px]">
-                  Read Only
-                </span>
-              </div>
             </div>
           </div>
         )}
@@ -852,15 +833,7 @@ export function DocumentDetailView({ doc, onBack }) {
             <h3 className="font-bold text-slate-800 text-sm">
               Linked Documents & References
             </h3>
-            <ul className="space-y-2">
-              <li className="flex items-center gap-2 text-blue-600 hover:underline cursor-pointer">
-                <Link2 size={14} /> NIST Cybersecurity Framework (NIST SP
-                800-53)
-              </li>
-              <li className="flex items-center gap-2 text-blue-600 hover:underline cursor-pointer">
-                <Link2 size={14} /> ISO/IEC 27001:2022 Compliance Guideline
-              </li>
-            </ul>
+            <p className="text-slate-500">No linked references recorded.</p>
           </div>
         )}
 
@@ -872,17 +845,8 @@ export function DocumentDetailView({ doc, onBack }) {
             </h3>
             <div className="space-y-3 border-l-2 border-slate-200 pl-4 ml-2">
               <div className="relative">
-                <span className="absolute -left-[21px] top-0 w-2.5 h-2.5 rounded-full bg-blue-600" />
-                <p className="font-semibold text-slate-800">Document Edited</p>
-                <p className="text-slate-500 text-[11px]">
-                  {doc.date} - by {doc.owner}
-                </p>
-              </div>
-              <div className="relative">
                 <span className="absolute -left-[21px] top-0 w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                <p className="font-semibold text-slate-800">
-                  Document Uploaded & Created
-                </p>
+                <p className="font-semibold text-slate-800">Document Created</p>
                 <p className="text-slate-500 text-[11px]">
                   {doc.createdOn} - by {doc.owner}
                 </p>
@@ -896,184 +860,47 @@ export function DocumentDetailView({ doc, onBack }) {
 }
 
 // ==========================================
-// 3. UPLOAD DOCUMENT VIEW (NAV TARGET)
-// ==========================================
-// export function UploadDocumentView({ onCancel, onSubmitSuccess }) {
-//   const [currentStep, setCurrentStep] = useState(1);
-//   const [selectedTypeKey, setSelectedTypeKey] = useState("CONTRACT");
-//   const [formData, setFormData] = useState({
-//     currency: "USD",
-//     tags: ["Contract", "ERP"],
-//   });
-//   const [uploadedFile, setUploadedFile] = useState({
-//     name: "Master_Service_Agreement.pdf",
-//     size: "1.24 MB",
-//   });
-
-//   const activeConfig = useMemo(() => {
-//     return (
-//       DOCUMENT_TYPES_CONFIG[selectedTypeKey] || DOCUMENT_TYPES_CONFIG.CONTRACT
-//     );
-//   }, [selectedTypeKey]);
-
-//   const handleInputChange = (field, value) => {
-//     setFormData((prev) => ({ ...prev, [field]: value }));
-//   };
-
-//   const isMetadataValid = useMemo(() => {
-//     return activeConfig.fields
-//       .filter((f) => f.required)
-//       .every(
-//         (f) => formData[f.name] && formData[f.name].toString().trim() !== "",
-//       );
-//   }, [activeConfig, formData]);
-
-//   return (
-//     <div className="flex bg-slate-100 text-slate-800 font-sans min-h-screen">
-//       <div className="flex-1 flex flex-col min-w-0">
-//         {/* Header with Nav Action */}
-//         <div className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between">
-//           <div>
-//             <h1 className="text-xl font-bold text-slate-900">
-//               Upload New Document
-//             </h1>
-//             <p className="text-xs text-slate-500 mt-0.5">
-//               Create a new document entry in the Governance System
-//             </p>
-//           </div>
-//           <button
-//             onClick={onCancel}
-//             className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 border border-slate-300 rounded-md transition-colors cursor-pointer flex items-center gap-1"
-//           >
-//             <ArrowLeft size={14} /> Back to Documents
-//           </button>
-//         </div>
-
-//         {/* Form Grid */}
-//         <div className="p-6 mx-auto w-full space-y-6">
-//           <div className="grid grid-cols-12 gap-6">
-//             <div className="col-span-8 bg-white p-6 rounded-lg border border-slate-200 shadow-sm space-y-6">
-//               <div className="space-y-2">
-//                 <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-//                   Select Document Type
-//                 </label>
-//                 <select
-//                   value={selectedTypeKey}
-//                   onChange={(e) => setSelectedTypeKey(e.target.value)}
-//                   className="w-full bg-slate-50 border border-slate-300 rounded-md py-2 px-3 text-xs font-semibold text-slate-800 focus:outline-none"
-//                 >
-//                   {Object.keys(DOCUMENT_TYPES_CONFIG).map((key) => (
-//                     <option key={key} value={key}>
-//                       {DOCUMENT_TYPES_CONFIG[key].label}
-//                     </option>
-//                   ))}
-//                 </select>
-//               </div>
-
-//               {/* Dynamic Metadata Form */}
-//               <div className="grid grid-cols-2 gap-4">
-//                 {activeConfig.fields.map((field) => (
-//                   <div
-//                     key={field.name}
-//                     className={
-//                       field.type === "textarea" ? "col-span-2" : "col-span-1"
-//                     }
-//                   >
-//                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-//                       {field.label}{" "}
-//                       {field.required && (
-//                         <span className="text-red-500">*</span>
-//                       )}
-//                     </label>
-//                     {field.type === "text" && (
-//                       <input
-//                         type="text"
-//                         placeholder={field.placeholder}
-//                         value={formData[field.name] || ""}
-//                         onChange={(e) =>
-//                           handleInputChange(field.name, e.target.value)
-//                         }
-//                         className="w-full border border-slate-300 rounded px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500"
-//                       />
-//                     )}
-//                     {field.type === "date" && (
-//                       <input
-//                         type="date"
-//                         value={formData[field.name] || ""}
-//                         onChange={(e) =>
-//                           handleInputChange(field.name, e.target.value)
-//                         }
-//                         className="w-full border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-700"
-//                       />
-//                     )}
-//                     {field.type === "dropdown" && (
-//                       <select
-//                         value={formData[field.name] || ""}
-//                         onChange={(e) =>
-//                           handleInputChange(field.name, e.target.value)
-//                         }
-//                         className="w-full border border-slate-300 rounded px-3 py-1.5 text-xs bg-white text-slate-700"
-//                       >
-//                         <option value="">Select Option</option>
-//                         {field.options?.map((opt) => (
-//                           <option key={opt} value={opt}>
-//                             {opt}
-//                           </option>
-//                         ))}
-//                       </select>
-//                     )}
-//                   </div>
-//                 ))}
-//               </div>
-
-//               <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
-//                 <button
-//                   type="button"
-//                   onClick={onCancel}
-//                   className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 border border-slate-300 rounded-md"
-//                 >
-//                   Cancel
-//                 </button>
-//                 <button
-//                   type="button"
-//                   onClick={() => {
-//                     alert("Document Saved & Uploaded!");
-//                     onSubmitSuccess();
-//                   }}
-//                   className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md flex items-center gap-1.5"
-//                 >
-//                   Submit & Save Document
-//                 </button>
-//               </div>
-//             </div>
-
-//             {/* Sidebar Details */}
-//             <div className="col-span-4 space-y-6">
-//               <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
-//                 <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-//                   File Attachment
-//                 </h4>
-//                 <div className="border-2 border-dashed border-blue-200 bg-blue-50/40 rounded-lg p-6 text-center space-y-2">
-//                   <Upload size={20} className="mx-auto text-blue-600" />
-//                   <p className="text-xs font-semibold text-slate-800">
-//                     Drag & drop file or click to browse
-//                   </p>
-//                 </div>
-//               </div>
-//             </div>
-//           </div>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
-// ==========================================
 // 4. MAIN CONTAINER & STATEFUL ROUTER
 // ==========================================
 export default function DocumentManagementModule() {
-  const [currentView, setCurrentView] = useState("LIST"); // Views: "LIST" | "DETAIL" | "UPLOAD"
+  const [documents, setDocuments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const [currentView, setCurrentView] = useState("LIST"); // "LIST" | "DETAIL" | "UPLOAD"
   const [selectedDoc, setSelectedDoc] = useState(null);
+  const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
+
+  // Fetch API Documents
+  const fetchDocuments = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        "https://documentgovernance.onrender.com/api/documents",
+      );
+      if (!response.ok) {
+        throw new Error(`Server returned status code ${response.status}`);
+      }
+      const data = await response.json();
+
+      // Transform raw API data into component format
+      const formattedData = Array.isArray(data)
+        ? data.map(mapApiDocumentToUI)
+        : [];
+
+      setDocuments(formattedData);
+    } catch (err) {
+      console.error("Failed to load documents from API:", err);
+      setError("Failed to fetch documents. Please try again later.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDocuments();
+  }, []);
 
   const handleSelectDoc = (doc) => {
     setSelectedDoc(doc);
@@ -1087,10 +914,21 @@ export default function DocumentManagementModule() {
   const handleBackToList = () => {
     setSelectedDoc(null);
     setCurrentView("LIST");
+    fetchDocuments(); // Refresh list when returning from operations
+  };
+
+  const handleVersionUploadSuccess = (payload) => {
+    setSelectedDoc((prev) => ({
+      ...prev,
+      version: payload.newVersion,
+      date: payload.updatedAt,
+    }));
+    setIsVersionModalOpen(false);
   };
 
   return (
     <div className="bg-slate-100 min-h-screen">
+      {/* 1. CREATING BRAND-NEW DOCUMENT */}
       {currentView === "UPLOAD" && (
         <UploadDocumentView
           onCancel={handleBackToList}
@@ -1098,14 +936,37 @@ export default function DocumentManagementModule() {
         />
       )}
 
+      {/* 2. VIEWING & MANAGING AN EXISTING DOCUMENT */}
       {currentView === "DETAIL" && selectedDoc && (
-        <DocumentDetailView doc={selectedDoc} onBack={handleBackToList} />
+        <DocumentDetailView
+          doc={selectedDoc}
+          onBack={handleBackToList}
+          onOpenVersionModal={() => setIsVersionModalOpen(true)}
+        />
       )}
 
+      {/* 3. MAIN DOCUMENTS TABLE / LIST */}
       {currentView === "LIST" && (
         <DocumentsView
+          documents={documents}
+          isLoading={isLoading}
+          error={error}
           onSelectDoc={handleSelectDoc}
           onNavigateToUpload={handleNavigateToUpload}
+        />
+      )}
+
+      {/* 4. VERSION UPLOAD MODAL OVERLAY */}
+      {isVersionModalOpen && selectedDoc && (
+        <DocumentVersionUploadModal
+          existingDocument={{
+            id: selectedDoc.id,
+            title: selectedDoc.title,
+            currentVersion: selectedDoc.version || "1.0",
+            documentType: selectedDoc.type,
+          }}
+          onClose={() => setIsVersionModalOpen(false)}
+          onUploadSuccess={handleVersionUploadSuccess}
         />
       )}
     </div>

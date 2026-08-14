@@ -152,61 +152,6 @@ const NavigationSidebar = ({
   );
 
   /* ====================================================================
-   * FILTER: Match Groups with BI Reports and Permission Checks
-   * ==================================================================== */
-  const activeGroupsWithReports = useMemo(() => {
-    if (!apiGroups.length || !biReports.length) return [];
-
-    const reportIdMap = new Map();
-    biReports.forEach((rep) => {
-      if (rep.id) reportIdMap.set(String(rep.id), rep);
-    });
-
-    const screensMap = visibility?.screens || visibility;
-
-    return apiGroups
-      .map((grp) => {
-        const rawGroupReports = Array.isArray(grp.reports)
-          ? grp.reports
-          : grp.reportIds || [];
-
-        const groupReportIds = rawGroupReports.map((item) => {
-          if (typeof item === "object" && item !== null) {
-            return String(item.id || item.reportId || "");
-          }
-          return String(item);
-        });
-
-        const matchedReports = groupReportIds
-          .filter((reportId) => {
-            if (!reportId) return false;
-
-            if (typeof canView === "function") {
-              return canView(reportId) === true;
-            }
-
-            return screensMap?.[reportId]?.view === true;
-          })
-          .map((reportId) => reportIdMap.get(reportId))
-          .filter(Boolean);
-
-        return {
-          id: grp.id,
-          name: grp.name,
-          reports: matchedReports,
-        };
-      })
-      .filter((grp) => grp.reports.length > 0);
-  }, [apiGroups, biReports, visibility, canView]);
-
-  const totalReportCount = useMemo(() => {
-    return activeGroupsWithReports.reduce(
-      (acc, grp) => acc + grp.reports.length,
-      0,
-    );
-  }, [activeGroupsWithReports]);
-
-  /* ====================================================================
    * PERMISSION CHECKS
    * ==================================================================== */
   const canViewDashboard = checkAccess("Dashboard", "dashboard");
@@ -358,6 +303,16 @@ const NavigationSidebar = ({
                     <NavItem
                       label="Upload Document"
                       path="/dashboard/upload-documents"
+                      selected={selectedPage}
+                      onClick={handleLinkClick}
+                      searchTerm={searchTerm}
+                      isExpanded={isExpanded}
+                    />
+                    {/* )} */}
+                    {/* {canViewEditBudget && ( */}
+                    <NavItem
+                      label="My Tasks"
+                      path="/dashboard/tasks-view"
                       selected={selectedPage}
                       onClick={handleLinkClick}
                       searchTerm={searchTerm}

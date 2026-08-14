@@ -66,7 +66,7 @@ export default function DraggablePopupManager() {
     <div className="relative w-full h-[600px] bg-slate-100/60 rounded border border-dashed border-slate-300 p-4 overflow-hidden select-none">
       {/* Root Context Trigger Area */}
       <div className="bg-white p-3 rounded border border-slate-200 shadow-sm max-w-sm space-y-2">
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+        <span className="text-[10px] font-bold text-slate-400  tracking-wider block">
           Workspace Controller
         </span>
         <h4 className="font-bold text-slate-800 text-xs">
@@ -117,7 +117,7 @@ export default function DraggablePopupManager() {
           {/* Dynamic Popup Action Workspace */}
           <div className="p-3 space-y-2 bg-slate-50/50">
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              <label className="text-[10px] font-bold text-slate-400  tracking-wider">
                 Quick Filter Search
               </label>
               <input

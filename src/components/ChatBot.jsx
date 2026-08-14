@@ -921,7 +921,7 @@ const ChatBot = () => {
     ),
     th: ({ node, ...props }) => (
       <th
-        className="px-3 py-2 uppercase tracking-wider text-[10px] font-semibold"
+        className="px-3 py-2  tracking-wider text-[10px] font-semibold"
         style={{ color: "#4B5563", borderBottom: "1px solid #E5E7EB" }}
         {...props}
       />
@@ -968,7 +968,7 @@ const ChatBot = () => {
         <div className="p-3.5 border-b" style={{ borderColor: "#154B5A" }}>
           <div className="flex items-center justify-between mb-3">
             <span
-              className="text-xs font-semibold uppercase tracking-wider"
+              className="text-xs font-semibold  tracking-wider"
               style={{ color: "#9FC2CE" }}
             >
               Chat History
@@ -1015,7 +1015,7 @@ const ChatBot = () => {
             groupedSessions.map(([label, items]) => (
               <div key={label}>
                 <div
-                  className="px-2.5 pb-1.5 text-[10px] cursor-pointer font-semibold uppercase tracking-wider"
+                  className="px-2.5 pb-1.5 text-[10px] cursor-pointer font-semibold  tracking-wider"
                   style={{ color: "#5F8896" }}
                 >
                   {label}
@@ -1222,7 +1222,7 @@ const ChatBot = () => {
                               }}
                             >
                               <div
-                                className="px-3 py-1.5 text-[10px] uppercase tracking-wider flex items-center gap-2 font-medium shrink-0"
+                                className="px-3 py-1.5 text-[10px]  tracking-wider flex items-center gap-2 font-medium shrink-0"
                                 style={{
                                   background: "#F3F4F6",
                                   color: "#6B7280",
