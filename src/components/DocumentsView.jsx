@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Plus,
   MoreVertical,
@@ -35,12 +35,18 @@ import {
   ChevronRight,
   ZoomOut,
   ZoomIn,
+  XCircle,
+  Loader2,
+  FileUp,
 } from "lucide-react";
 import { UploadDocumentView } from "./UploadDocumentView";
 import { DocumentVersionUploadModal } from "./DocumentVersionUploadModal";
 import { PdfViewer } from "./PdfViewer";
 
 import samplePdf from "../assets/DeltekCostpoint82ExtensibilityDesignerCodingGuide.pdf";
+import { TasksView } from "./TasksView";
+import { backendUrlGrc } from "./config";
+import axios from "axios";
 
 // Lookup Mappings for API numeric/string fields to UI displays
 const DOCUMENT_TYPES_MAP = {
@@ -83,19 +89,83 @@ const STATUS_COLOR_MAP = {
   "In Review": "bg-amber-100 text-amber-800",
   "PENDING APPROVAL": "bg-purple-100 text-purple-800",
   "Pending Approval": "bg-purple-100 text-purple-800",
+
+  // ===== ADDED: Color styles for REJECTED and APPROVED API statuses =====
+  REJECTED: "bg-red-100 text-red-800 border border-red-200",
+  Rejected: "bg-red-100 text-red-800 border border-red-200",
+  APPROVED: "bg-emerald-100 text-emerald-800 border border-emerald-200",
+  Approved: "bg-emerald-100 text-emerald-800 border border-emerald-200",
 };
 
 /**
  * Maps incoming API objects to the structure expected by UI components.
  */
-function mapApiDocumentToUI(doc) {
-  // Extract latest version if available
-  const latestVersion =
-    doc.versions && doc.versions.length > 0
-      ? doc.versions[doc.versions.length - 1]
-      : null;
+// function mapApiDocumentToUI(doc) {
+//   // Extract latest version if available
+//   const latestVersion =
+//     doc.versions && doc.versions.length > 0
+//       ? doc.versions[doc.versions.length - 1]
+//       : null;
 
-  // Formatting dates cleanly (YYYY-MM-DD to DD MMM YYYY or local string)
+//   // Formatting dates cleanly (YYYY-MM-DD to DD MMM YYYY or local string)
+//   const formatDate = (dateStr) => {
+//     if (!dateStr) return "N/A";
+//     const date = new Date(dateStr);
+//     return isNaN(date.getTime())
+//       ? dateStr
+//       : date.toLocaleDateString("en-GB", {
+//           day: "2-digit",
+//           month: "short",
+//           year: "numeric",
+//         });
+//   };
+
+//   const statusFormatted = doc.status
+//     ? doc.status.charAt(0).toUpperCase() + doc.status.slice(1).toLowerCase()
+//     : "Draft";
+
+//   return {
+//     id: String(doc.documentId),
+//     title: doc.title || "Untitled Document",
+//     number: doc.documentNo || `DOC-${doc.documentId}`,
+//     type: DOCUMENT_TYPES_MAP[doc.documentTypeId] || "Policy",
+//     status: statusFormatted,
+//     fileUrl: latestVersion?.fileUrl || samplePdf,
+//     totalPages: latestVersion?.totalPages || 1,
+//     statusColor:
+//       STATUS_COLOR_MAP[doc.status] ||
+//       STATUS_COLOR_MAP[statusFormatted] ||
+//       "bg-slate-100 text-slate-700",
+//     version: latestVersion?.versionNumber || "1.0",
+//     owner: doc.ownerName || `User #${doc.ownerUserId || doc.createdBy || "1"}`,
+//     date: formatDate(doc.createdAt),
+//     category: CATEGORY_MAP[doc.categoryId] || "General",
+//     department: DEPARTMENT_MAP[doc.departmentId] || "IT",
+//     effectiveDate: formatDate(doc.effectiveDate),
+//     reviewDate: formatDate(doc.nextReviewDate),
+//     classification: CLASSIFICATION_MAP[doc.classificationId] || "Internal",
+//     retention: doc.retentionPolicyId
+//       ? `${doc.retentionPolicyId} Years`
+//       : "Standard",
+//     workflow: "Standard Review Workflow",
+//     createdOn: formatDate(doc.createdAt),
+//     description:
+//       doc.description ||
+//       `Document reference ${doc.documentNo} under ${CATEGORY_MAP[doc.categoryId] || "General"}.`,
+//   };
+// }
+
+// Metadata configuration for Upload Wizard
+
+function mapApiDocumentToUI(doc) {
+  if (!doc) return {};
+
+  // Extract latest version safely with array checks
+  const versionsList = Array.isArray(doc.versions) ? doc.versions : [];
+  const latestVersion =
+    versionsList.length > 0 ? versionsList[versionsList.length - 1] : null;
+
+  // Formatting dates cleanly
   const formatDate = (dateStr) => {
     if (!dateStr) return "N/A";
     const date = new Date(dateStr);
@@ -113,37 +183,49 @@ function mapApiDocumentToUI(doc) {
     : "Draft";
 
   return {
-    id: String(doc.documentId),
+    id: String(doc.documentId || doc.id || ""),
+    documentId: doc.documentId || doc.id,
     title: doc.title || "Untitled Document",
-    number: doc.documentNo || `DOC-${doc.documentId}`,
-    type: DOCUMENT_TYPES_MAP[doc.documentTypeId] || "Policy",
+    number: doc.documentNo || `DOC-${doc.documentId || "00"}`,
+    type: DOCUMENT_TYPES_MAP[doc.documentTypeId] || doc.type || "Policy",
     status: statusFormatted,
-    fileUrl: latestVersion?.fileUrl || samplePdf,
-    totalPages: latestVersion?.totalPages || 1,
+    fileUrl: latestVersion?.fileUrl || doc.fileUrl || samplePdf,
+    totalPages: latestVersion?.totalPages || doc.totalPages || 1,
     statusColor:
       STATUS_COLOR_MAP[doc.status] ||
       STATUS_COLOR_MAP[statusFormatted] ||
       "bg-slate-100 text-slate-700",
-    version: latestVersion?.versionNumber || "1.0",
-    owner: doc.ownerName || `User #${doc.ownerUserId || doc.createdBy || "1"}`,
-    date: formatDate(doc.createdAt),
-    category: CATEGORY_MAP[doc.categoryId] || "General",
-    department: DEPARTMENT_MAP[doc.departmentId] || "IT",
+    version: latestVersion?.versionNumber || doc.version || "1.0",
+    owner:
+      doc.ownerName ||
+      doc.owner ||
+      `User #${doc.ownerUserId || doc.createdBy || "1"}`,
+    date: formatDate(doc.createdAt || doc.date),
+    category: CATEGORY_MAP[doc.categoryId] || doc.category || "General",
+    department: DEPARTMENT_MAP[doc.departmentId] || doc.department || "IT",
     effectiveDate: formatDate(doc.effectiveDate),
     reviewDate: formatDate(doc.nextReviewDate),
-    classification: CLASSIFICATION_MAP[doc.classificationId] || "Internal",
+    classification:
+      CLASSIFICATION_MAP[doc.classificationId] ||
+      doc.classification ||
+      "Internal",
     retention: doc.retentionPolicyId
       ? `${doc.retentionPolicyId} Years`
-      : "Standard",
+      : doc.retention || "Standard",
     workflow: "Standard Review Workflow",
-    createdOn: formatDate(doc.createdAt),
+    createdOn: formatDate(doc.createdAt || doc.createdOn),
     description:
       doc.description ||
-      `Document reference ${doc.documentNo} under ${CATEGORY_MAP[doc.categoryId] || "General"}.`,
+      `Document reference ${doc.documentNo || doc.id} under ${
+        CATEGORY_MAP[doc.categoryId] || doc.category || "General"
+      }.`,
+
+    // ✅ MUST Include request fields explicitly:
+    requestId: doc.requestId || doc.request?.requestId || null,
+    request: doc.request || null,
   };
 }
 
-// Metadata configuration for Upload Wizard
 const DOCUMENT_TYPES_CONFIG = {
   CONTRACT: {
     id: "CONTRACT",
@@ -320,86 +402,272 @@ function InfoRow({ label, value }) {
   );
 }
 
-function WorkflowStep({ label, name, date, completed, active, pending }) {
-  return (
-    <div className="flex flex-col items-center text-center z-10 flex-1">
-      <div
-        className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 font-bold text-xs ${
-          completed
-            ? "bg-emerald-500 text-white"
-            : active
-              ? "bg-blue-600 text-white ring-4 ring-blue-100"
-              : "bg-slate-200 text-slate-500"
-        }`}
-      >
-        {completed ? (
-          <CheckCircle2 size={16} />
-        ) : active ? (
-          <Clock size={16} />
-        ) : (
-          <Circle size={16} />
-        )}
-      </div>
-      <span className="text-xs font-semibold text-slate-800">{label}</span>
-      {name && <span className="text-[11px] text-slate-500">{name}</span>}
-      {date && <span className="text-[10px] text-slate-400">{date}</span>}
-    </div>
-  );
-}
+// function WorkflowStep({ label, name, date, completed, active, pending }) {
+//   return (
+//     <div className="flex flex-col items-center text-center z-10 flex-1">
+//       <div
+//         className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 font-bold text-xs ${
+//           completed
+//             ? "bg-emerald-500 text-white"
+//             : active
+//               ? "bg-blue-600 text-white ring-4 ring-blue-100"
+//               : "bg-slate-200 text-slate-500"
+//         }`}
+//       >
+//         {completed ? (
+//           <CheckCircle2 size={16} />
+//         ) : active ? (
+//           <Clock size={16} />
+//         ) : (
+//           <Circle size={16} />
+//         )}
+//       </div>
+//       <span className="text-xs font-semibold text-slate-800">{label}</span>
+//       {name && <span className="text-[11px] text-slate-500">{name}</span>}
+//       {date && <span className="text-[10px] text-slate-400">{date}</span>}
+//     </div>
+//   );
+// }
 
 // ==========================================
 // 1. MAIN DOCUMENTS VIEW
 // ==========================================
+
+// ===== UPDATED WorkflowStep to support APPROVED, REJECTED, and PENDING statuses dynamically =====
+function WorkflowStep({ label, name, date, status, comments }) {
+  const isCompleted = status === "APPROVED";
+  const isRejected = status === "REJECTED";
+  const isPending = status === "PENDING";
+
+  return (
+    <div className="flex flex-col items-center text-center z-10 flex-1 min-w-[120px]">
+      <div
+        className={`w-9 h-9 rounded-full flex items-center justify-center mb-2 font-bold text-xs shadow-sm transition-all ${
+          isCompleted
+            ? "bg-emerald-500 text-white"
+            : isRejected
+              ? "bg-red-500 text-white ring-4 ring-red-100"
+              : "bg-slate-200 text-slate-500"
+        }`}
+      >
+        {isCompleted ? (
+          <CheckCircle2 size={18} />
+        ) : isRejected ? (
+          <XCircle size={18} />
+        ) : (
+          <Circle size={18} />
+        )}
+      </div>
+      <span className="text-xs font-bold text-slate-800">{label}</span>
+      {name && (
+        <span className="text-[11px] text-slate-600 mt-0.5">{name}</span>
+      )}
+      {date && <span className="text-[10px] text-slate-400">{date}</span>}
+      {comments && (
+        <span
+          className="text-[10px] italic text-slate-500 mt-1 max-w-[110px] truncate block"
+          title={comments}
+        >
+          "{comments}"
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function DocumentsView({
   documents = [],
+  approvalTasks = [],
   isLoading = false,
   error = null,
   onSelectDoc,
   onNavigateToUpload,
+  fetchAllData,
+  userId,
 }) {
-  const [activeTab, setActiveTab] = useState("All Documents");
+  const [activeTab, setActiveTab] = useState("Review");
   const [search, setSearch] = useState("");
   const [selectedType, setSelectedType] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [selectedOwner, setSelectedOwner] = useState("All");
 
+  // Canvas & Signature States
+  const canvasRef = useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [signatureData, setSignatureData] = useState(null);
+
+  // Modal & Task States
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [actionType, setActionType] = useState(null); // 'review' | 'approve' | 'esign'
+  const [comments, setComments] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // Preview & Version Upload States
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
+  const [selectedVersionDoc, setSelectedVersionDoc] = useState(null);
+
+  const handleOpenDocumentPreview = (doc) => {
+    setPreviewDoc({
+      ...doc,
+      docName: doc.title || doc.docName,
+      docNo: doc.number || doc.docNo,
+    });
+  };
+
+  const handleOpenVersionModal = (doc) => {
+    setSelectedVersionDoc(doc);
+    setIsVersionModalOpen(true);
+  };
+
+  const handleVersionUploadSuccess = (payload) => {
+    setIsVersionModalOpen(false);
+    setSelectedVersionDoc(null);
+    if (previewDoc) {
+      setPreviewDoc((prev) => ({
+        ...prev,
+        version: payload.newVersion || prev.version,
+      }));
+    }
+  };
+
+  const handleOpenAction = (doc, mode) => {
+    const taskPayload = {
+      ...doc,
+      docName: doc.title || doc.docName,
+      documentId: doc.documentId || doc.id,
+      content: doc.description || `Review specifications for ${doc.title}`,
+      taskId: doc.taskId || doc.id,
+    };
+    setSelectedTask(taskPayload);
+    setActionType(mode);
+    setComments("");
+  };
+
+  const startDrawing = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const rect = canvas.getBoundingClientRect();
+    ctx.beginPath();
+    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+    setIsDrawing(true);
+  };
+
+  const draw = (e) => {
+    if (!isDrawing) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const rect = canvas.getBoundingClientRect();
+    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+    ctx.strokeStyle = "#1e3a8a";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => {
+    if (!isDrawing) return;
+    setIsDrawing(false);
+    if (canvasRef.current) {
+      setSignatureData(canvasRef.current.toDataURL());
+    }
+  };
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setSignatureData(null);
+  };
+
+  const handleCompleteTask = async (statusOutcome) => {
+    if (!selectedTask) return;
+
+    if (actionType === "esign" && !signatureData) {
+      alert("Please provide an e-Signature before submitting.");
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      const reqData = selectedTask.originalData?.requestLevel?.request || {};
+
+      if (activeTab === "Review") {
+        const payload = {
+          workflowId: reqData.workflowId || 1,
+          documentId: selectedTask.documentId || 0,
+          recordId: reqData.recordId || 0,
+          recordType: reqData.recordType || "string",
+          title: selectedTask.docName,
+          requestedBy: userId,
+          remarks: comments || "Reviewed",
+        };
+        await axios.post(`${backendUrlGrc}/api/approval/requests`, payload);
+        alert("Document review request sent successfully!");
+      } else {
+        if (statusOutcome === "Rejected") {
+          await axios.post(
+            `${backendUrlGrc}/api/approval/tasks/${selectedTask.taskId}/reject`,
+            { comments },
+            { params: { userId: userId } },
+          );
+        } else {
+          await axios.post(
+            `${backendUrlGrc}/api/approval/tasks/${selectedTask.taskId}/approve`,
+            { comments },
+            { params: { userId: userId } },
+          );
+        }
+        alert(`Task successfully processed as ${statusOutcome}!`);
+      }
+      setSelectedTask(null);
+      setActionType(null);
+      if (fetchAllData) fetchAllData();
+    } catch (error) {
+      console.error("Error processing action:", error);
+      alert("Failed to process action. Please try again.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // 1. Get base dataset depending on tab selection[cite: 3]
+  const baseData = useMemo(() => {
+    if (activeTab === "Review") {
+      return documents;
+    } else if (activeTab === "Approval") {
+      return approvalTasks.filter((t) => t.status === "PENDING");
+    } else if (activeTab === "Rejected") {
+      return approvalTasks.filter((t) => t.status === "REJECTED");
+    } else if (activeTab === "Completed") {
+      return approvalTasks.filter((t) => t.status === "COMPLETED");
+    }
+    return [];
+  }, [activeTab, documents, approvalTasks]);
+
+  // 2. Apply search and dynamic filters over active dataset
   const filteredDocs = useMemo(() => {
-    return documents.filter((doc) => {
-      if (activeTab === "Drafts" && doc.status.toLowerCase() !== "draft")
-        return false;
-      if (activeTab === "Published" && doc.status.toLowerCase() !== "published")
-        return false;
-      if (activeTab === "Archived" && doc.status.toLowerCase() !== "archived")
-        return false;
-      if (
-        activeTab === "Superseded" &&
-        doc.status.toLowerCase() !== "superseded"
-      )
-        return false;
+    return baseData.filter((item) => {
+      const title = item.title || item.docName || "";
+      const docNum = item.number || item.docNo || "";
 
       const matchesSearch =
-        doc.title.toLowerCase().includes(search.toLowerCase()) ||
-        doc.number.toLowerCase().includes(search.toLowerCase());
+        title.toLowerCase().includes(search.toLowerCase()) ||
+        docNum.toLowerCase().includes(search.toLowerCase());
       if (!matchesSearch) return false;
 
-      if (selectedType !== "All" && doc.type !== selectedType) return false;
+      if (selectedType !== "All" && item.type !== selectedType) return false;
       if (
         selectedStatus !== "All" &&
-        doc.status.toLowerCase() !== selectedStatus.toLowerCase()
+        item.status?.toLowerCase() !== selectedStatus.toLowerCase()
       )
         return false;
-      if (selectedOwner !== "All" && doc.owner !== selectedOwner) return false;
+      if (selectedOwner !== "All" && item.owner !== selectedOwner) return false;
 
       return true;
     });
-  }, [
-    documents,
-    activeTab,
-    search,
-    selectedType,
-    selectedStatus,
-    selectedOwner,
-  ]);
+  }, [baseData, search, selectedType, selectedStatus, selectedOwner]);
 
   return (
     <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-5 space-y-4">
@@ -420,21 +688,19 @@ export function DocumentsView({
 
       {/* Filter Tabs */}
       <div className="flex items-center gap-4 border-b border-slate-200 text-sm">
-        {["All Documents", "Drafts", "Published", "Archived", "Superseded"].map(
-          (tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`py-2 text-xs font-semibold border-b-2 cursor-pointer transition-colors ${
-                activeTab === tab
-                  ? "border-blue-600 text-blue-600"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              {tab}
-            </button>
-          ),
-        )}
+        {["Review", "Approval", "Rejected", "Completed"].map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`py-2 text-xs font-semibold border-b-2 cursor-pointer transition-colors ${
+              activeTab === tab
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
       </div>
 
       {/* Filter Controls */}
@@ -470,7 +736,7 @@ export function DocumentsView({
             <option value="Published">Published</option>
             <option value="In Review">In Review</option>
             <option value="Draft">Draft</option>
-            <option value="Pending Approval">Pending Approval</option>
+            <option value="PENDING">Pending</option>
           </select>
 
           <select
@@ -479,7 +745,9 @@ export function DocumentsView({
             className="border border-slate-200 rounded px-3 py-1.5 text-slate-600 bg-white"
           >
             <option value="All">All Owners</option>
-            {Array.from(new Set(documents.map((d) => d.owner))).map((owner) => (
+            {Array.from(
+              new Set(baseData.map((d) => d.owner).filter(Boolean)),
+            ).map((owner) => (
               <option key={owner} value={owner}>
                 {owner}
               </option>
@@ -500,7 +768,7 @@ export function DocumentsView({
         </button>
       </div>
 
-      {/* Table & Loading/Error States */}
+      {/* Table Section */}
       <div className="overflow-x-auto">
         {isLoading ? (
           <div className="p-8 text-center text-slate-500 text-xs">
@@ -518,14 +786,91 @@ export function DocumentsView({
                 <th className="p-3">Status</th>
                 <th className="p-3">Version</th>
                 <th className="p-3">Owner</th>
-                <th className="p-3">Modified On</th>
+                <th className="p-3">Created / Modified</th>
                 <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredDocs.length > 0 ? (
                 filteredDocs.map((doc) => (
-                  <TableRow key={doc.id} doc={doc} onSelect={onSelectDoc} />
+                  <tr
+                    key={doc.id}
+                    className="hover:bg-slate-50/80 transition-colors"
+                  >
+                    <td className="p-3 font-semibold text-slate-800">
+                      <button
+                        onClick={() => onSelectDoc(doc)}
+                        className="flex items-center gap-1.5 text-blue-600 hover:underline text-left cursor-pointer"
+                      >
+                        <FileText size={14} className="text-slate-400" />
+                        {doc.title || doc.docName}
+                      </button>
+                    </td>
+                    <td className="p-3 text-slate-600">
+                      {doc.number || doc.docNo}
+                    </td>
+                    <td className="p-3 text-slate-600">{doc.type}</td>
+                    <td className="p-3">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                          doc.status?.toLowerCase() === "draft"
+                            ? "bg-blue-50 text-blue-700 border-blue-200"
+                            : doc.status?.toLowerCase() === "completed" ||
+                                doc.status?.toLowerCase() === "published"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : doc.status?.toLowerCase() === "rejected"
+                                ? "bg-red-50 text-red-700 border-red-200"
+                                : "bg-slate-100 text-slate-600 border-slate-200"
+                        }`}
+                      >
+                        {doc.status}
+                      </span>
+                    </td>
+                    <td className="p-3 text-slate-600">
+                      {doc.version || "1.0"}
+                    </td>
+                    <td className="p-3 text-slate-600">{doc.owner}</td>
+                    <td className="p-3 text-slate-600">
+                      {doc.createdOn || doc.modifiedOn || "N/A"}
+                    </td>
+
+                    <td className="p-3 text-right">
+                      {activeTab === "Review" && (
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenAction(doc, "review")}
+                            className="px-2.5 py-1 text-slate-700 border border-slate-200 bg-white hover:bg-slate-100 rounded flex items-center gap-1 cursor-pointer font-medium"
+                          >
+                            <Eye size={12} /> Review
+                          </button>
+                        </div>
+                      )}
+
+                      {activeTab === "Approval" && (
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenAction(doc, "review")}
+                            className="px-2 py-1 text-slate-700 border border-slate-200 bg-white hover:bg-slate-100 rounded flex items-center gap-1 cursor-pointer"
+                          >
+                            <Eye size={12} /> Review
+                          </button>
+                          <button
+                            onClick={() => handleOpenAction(doc, "approve")}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded flex items-center gap-1 cursor-pointer font-medium"
+                          >
+                            <CheckCircle2 size={12} /> Approve
+                          </button>
+                        </div>
+                      )}
+
+                      {(activeTab === "Rejected" ||
+                        activeTab === "Completed") && (
+                        <span className="text-slate-400 italic">
+                          No actions available
+                        </span>
+                      )}
+                    </td>
+                  </tr>
                 ))
               ) : (
                 <tr>
@@ -538,6 +883,87 @@ export function DocumentsView({
           </table>
         )}
       </div>
+
+      {/* Task Review / Approval Modal */}
+      {selectedTask && (
+        <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-50 text-xs">
+          <div className="bg-white border border-slate-200 rounded-lg shadow-xl w-full max-w-xl p-2 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-bold text-slate-800">
+                {actionType === "approve"
+                  ? "Approve Document Request"
+                  : "Review Document"}
+              </h3>
+              <button
+                onClick={() => setSelectedTask(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 border rounded-lg p-4 space-y-2">
+              <div className="flex justify-between text-slate-600">
+                <span>Document:</span>
+                <span className="font-semibold text-slate-800">
+                  {selectedTask.docName}
+                </span>
+              </div>
+              <p className="text-slate-700 border-t pt-2 mt-2">
+                {selectedTask.content}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Comments
+              </label>
+              <textarea
+                rows={2}
+                value={comments}
+                onChange={(e) => setComments(e.target.value)}
+                placeholder="Enter review notes or comments..."
+                className="w-full border rounded p-2 text-xs text-slate-800 focus:outline-blue-600"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t">
+              <button
+                onClick={() => setSelectedTask(null)}
+                className="px-3 py-1.5 border rounded text-slate-600 hover:bg-slate-100 font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              {actionType === "review" ? (
+                <button
+                  onClick={() => handleCompleteTask("Reviewed")}
+                  disabled={actionLoading}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-semibold cursor-pointer"
+                >
+                  {actionLoading ? "Processing..." : "Complete Review"}
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => handleCompleteTask("Rejected")}
+                    disabled={actionLoading}
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded font-semibold cursor-pointer"
+                  >
+                    Reject
+                  </button>
+                  <button
+                    onClick={() => handleCompleteTask("Approved")}
+                    disabled={actionLoading}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-semibold cursor-pointer"
+                  >
+                    Approve
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -545,8 +971,83 @@ export function DocumentsView({
 // ==========================================
 // 2. DOCUMENT DETAIL VIEW WITH COMPLETE TABS
 // ==========================================
-export function DocumentDetailView({ doc, onBack, onOpenVersionModal }) {
+export function DocumentDetailView({
+  doc,
+  onBack,
+  onOpenVersionModal,
+  userId,
+}) {
   const [activeTab, setActiveTab] = useState("Overview");
+
+  // ===== ADDED: State to hold live workflow data fetched from APIs =====
+  const [workflowRequest, setWorkflowRequest] = useState(null);
+  const [pendingTasks, setPendingTasks] = useState([]);
+  const [isWorkflowLoading, setIsWorkflowLoading] = useState(true);
+  const [workflowError, setWorkflowError] = useState(null);
+
+  const formatApiDate = (dateStr) => {
+    if (!dateStr) return "N/A";
+    const date = new Date(dateStr);
+    return isNaN(date.getTime())
+      ? dateStr
+      : date.toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        });
+  };
+
+  // ===== ADDED: useEffect hook to fetch live approval request & pending tasks =====
+  useEffect(() => {
+    const fetchWorkflowStatus = async () => {
+      // Extract dynamic request ID safely from doc object
+      const requestId =
+        doc?.requestId ||
+        doc?.request?.requestId ||
+        doc?.originalData?.requestLevel?.request?.requestId ||
+        doc?.originalData?.requestLevel?.requestId;
+
+      if (!requestId) {
+        console.warn("No request associated with this document.");
+        setIsWorkflowLoading(false);
+        return;
+      }
+
+      setIsWorkflowLoading(true);
+      setWorkflowError(null);
+      try {
+        // Fetch both live endpoints simultaneously
+        const [requestRes, tasksRes] = await Promise.all([
+          fetch(`${backendUrlGrc}/api/approval/requests/${requestId}`),
+          fetch(`${backendUrlGrc}/api/approval/tasks/pending/${userId}`),
+        ]);
+
+        if (!requestRes.ok || !tasksRes.ok) {
+          throw new Error("Failed to load approval workflow state.");
+        }
+
+        const requestData = await requestRes.json();
+        const tasksData = await tasksRes.json();
+
+        setWorkflowRequest(requestData);
+        setPendingTasks(tasksData);
+      } catch (err) {
+        console.error("Error fetching live workflow:", err);
+        setWorkflowError("Unable to fetch live workflow details.");
+      } finally {
+        setIsWorkflowLoading(false);
+      }
+    };
+
+    fetchWorkflowStatus();
+  }, [
+    doc?.id,
+    doc?.documentId,
+    doc?.requestId,
+    doc?.request?.requestId,
+    doc?.originalData?.requestApproverId,
+    userId,
+  ]);
 
   if (!doc) return null;
 
@@ -600,11 +1101,11 @@ export function DocumentDetailView({ doc, onBack, onOpenVersionModal }) {
       <div className="flex items-center gap-6 border-b border-slate-200 text-xs font-semibold text-slate-500 bg-white px-4 pt-2 rounded-t-lg">
         {[
           "Overview",
-          "Details",
+          // "Details",
           "Versions",
-          "Workflow",
-          "Permissions",
-          "References",
+          // "Workflow",
+          // "Permissions",
+          // "References",
           "Audit Trail",
         ].map((tab) => (
           <button
@@ -626,6 +1127,64 @@ export function DocumentDetailView({ doc, onBack, onOpenVersionModal }) {
         {/* OVERVIEW TAB */}
         {activeTab === "Overview" && (
           <div className="space-y-6">
+            <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b pb-2">
+                <h3 className="font-bold text-slate-800 text-sm">
+                  Workflow Progress Status
+                </h3>
+                {workflowRequest && (
+                  <span className="text-xs text-slate-500 font-medium">
+                    Request #: {workflowRequest.requestNumber}
+                  </span>
+                )}
+              </div>
+
+              {/* Display Loading Spinner */}
+              {isWorkflowLoading ? (
+                <div className="p-6 text-center text-slate-500 flex items-center justify-center gap-2 text-xs">
+                  <Loader2 size={16} className="animate-spin text-blue-600" />
+                  Fetching live approval workflow...
+                </div>
+              ) : workflowError ? (
+                /* Display API Error */
+                <div className="p-4 text-center text-red-500 text-xs">
+                  {workflowError}
+                </div>
+              ) : workflowRequest?.levels ? (
+                /* Render API Level History Dynamically */
+                <div className="flex items-center justify-between relative px-2 md:px-6 py-4 overflow-x-auto gap-4">
+                  {workflowRequest.levels.map((lvl) => {
+                    // Find assigned user or approver who took action
+                    const activeApprover =
+                      lvl.approvers?.find((a) => a.actionOn || a.comments) ||
+                      lvl.approvers?.[0];
+
+                    return (
+                      <WorkflowStep
+                        key={lvl.requestLevelId}
+                        label={lvl.levelName}
+                        name={
+                          activeApprover
+                            ? `User #${activeApprover.userId}`
+                            : "Unassigned"
+                        }
+                        date={
+                          activeApprover?.actionOn
+                            ? formatApiDate(activeApprover.actionOn)
+                            : ""
+                        }
+                        status={lvl.status}
+                        comments={activeApprover?.comments || ""}
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-4 text-center text-slate-400 text-xs">
+                  No workflow levels found for this request.
+                </div>
+              )}
+            </div>
             <div className="grid grid-cols-12 gap-6">
               <div className="col-span-12 lg:col-span-5">
                 <PdfViewer
@@ -675,7 +1234,7 @@ export function DocumentDetailView({ doc, onBack, onOpenVersionModal }) {
             </div>
 
             {/* Stepper Workflow Progress Widget */}
-            <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
+            {/* <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
               <h3 className="font-bold text-slate-800 text-sm">
                 Workflow Progress Status
               </h3>
@@ -701,7 +1260,8 @@ export function DocumentDetailView({ doc, onBack, onOpenVersionModal }) {
                 <WorkflowStep label="Approval" name="David Wilson" active />
                 <WorkflowStep label="Publish" pending />
               </div>
-            </div>
+            </div> */}
+            {/* ===== DYNAMIC API WORKFLOW STEPPER ===== */}
           </div>
         )}
 
@@ -792,7 +1352,7 @@ export function DocumentDetailView({ doc, onBack, onOpenVersionModal }) {
         )}
 
         {/* WORKFLOW TAB */}
-        {activeTab === "Workflow" && (
+        {/* {activeTab === "Workflow" && (
           <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-sm space-y-4 text-xs">
             <h3 className="font-bold text-slate-800 text-sm">
               Active Workflow Details
@@ -800,6 +1360,68 @@ export function DocumentDetailView({ doc, onBack, onOpenVersionModal }) {
             <p className="text-slate-600">
               Current Assigned Scheme: <strong>{doc.workflow}</strong>
             </p>
+          </div>
+        )} */}
+        {/* ===== UPDATED: WORKFLOW TAB with real API details and active pending tasks ===== */}
+        {activeTab === "Workflow" && (
+          <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-sm space-y-6 text-xs">
+            <div>
+              <h3 className="font-bold text-slate-800 text-sm border-b pb-2 mb-3">
+                Active Workflow Summary
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <InfoRow
+                  label="Request ID"
+                  value={workflowRequest?.requestId || "N/A"}
+                />
+                <InfoRow
+                  label="Request Number"
+                  value={workflowRequest?.requestNumber || "N/A"}
+                />
+                <InfoRow
+                  label="Overall Status"
+                  value={workflowRequest?.status || "N/A"}
+                />
+                <InfoRow
+                  label="Submitted On"
+                  value={formatApiDate(workflowRequest?.submittedOn)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-bold text-slate-800 text-sm border-b pb-2 mb-3">
+                Pending Approval Tasks ({pendingTasks.length})
+              </h3>
+              {pendingTasks.length > 0 ? (
+                <div className="space-y-2">
+                  {pendingTasks.map((task, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 bg-slate-50 border border-slate-200 rounded flex justify-between items-center"
+                    >
+                      <div>
+                        <p className="font-bold text-slate-800">
+                          Level:{" "}
+                          {task.requestLevel?.levelName ||
+                            `Level ${task.requestLevelId}`}
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          Assigned User: User #{task.userId}
+                        </p>
+                      </div>
+                      <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded">
+                        {task.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-slate-400">
+                  No pending tasks for this workflow.
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -864,6 +1486,7 @@ export function DocumentDetailView({ doc, onBack, onOpenVersionModal }) {
 // ==========================================
 export default function DocumentManagementModule() {
   const [documents, setDocuments] = useState([]);
+  const [approvalTasks, setApprovalTasks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -871,39 +1494,199 @@ export default function DocumentManagementModule() {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
 
+  const getCurrentUserContext = () => {
+    try {
+      const userString = localStorage.getItem("currentUser");
+      if (!userString) return { userId: "", role: "" };
+      const userObj = JSON.parse(userString);
+      return {
+        userId: userObj.userId ?? "",
+        role: userObj.role?.toLowerCase() ?? "",
+      };
+    } catch {
+      return { userId: "", role: "" };
+    }
+  };
+
+  const { userId, role } = getCurrentUserContext();
+
   // Fetch API Documents
-  const fetchDocuments = async () => {
+  // const fetchDocuments = async () => {
+  //   setIsLoading(true);
+  //   setError(null);
+  //   try {
+  //     const response = await fetch(
+  //       "https://documentgovernance.onrender.com/api/documents",
+  //     );
+  //     if (!response.ok) {
+  //       throw new Error(`Server returned status code ${response.status}`);
+  //     }
+  //     const data = await response.json();
+
+  //     // Transform raw API data into component format
+  //     const formattedData = Array.isArray(data)
+  //       ? data.map(mapApiDocumentToUI)
+  //       : [];
+
+  //     setDocuments(formattedData);
+  //   } catch (err) {
+  //     console.error("Failed to load documents from API:", err);
+  //     setError("Failed to fetch documents. Please try again later.");
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
+
+  // useEffect(() => {
+  //   fetchDocuments();
+  // }, []);
+
+  // Replaced fetchDocuments with fetchAllData
+  const fetchAllData = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(
-        "https://documentgovernance.onrender.com/api/documents",
-      );
-      if (!response.ok) {
-        throw new Error(`Server returned status code ${response.status}`);
+      const [docRes, taskRes] = await Promise.all([
+        axios
+          .get(`${backendUrlGrc}/api/documents?UserId=${userId}`)
+          .catch(() => ({ data: [] })),
+        axios
+          .get(`${backendUrlGrc}/api/approval/tasks/pending/${userId}`)
+          .catch(() => ({ data: [] })),
+      ]);
+
+      if (docRes.data) {
+        // ✅ Normalize single object responses into an array
+        const rawDocArray = Array.isArray(docRes.data)
+          ? docRes.data
+          : [docRes.data];
+
+        const formattedDocs = rawDocArray.map((doc) => {
+          const requestId = doc.requestId || doc.request?.requestId || null;
+          return {
+            id: doc.documentId.toString(),
+            documentId: doc.documentId,
+            title: doc.title || "Untitled Document",
+            type: "Review",
+            docName: doc.title || "Untitled Document",
+            docNo: doc.documentNo || `DOC-${doc.documentId}`,
+            workflow: `Org ID: ${doc.organizationId || 1}`,
+            due: doc.createdAt
+              ? new Date(doc.createdAt).toLocaleDateString()
+              : "N/A",
+            priority: "Normal",
+            priorityColor: "bg-slate-100 text-slate-700 border-slate-200",
+            status: doc.status || "DRAFT",
+            content: `Review specifications for document number ${doc.documentNo}`,
+            category: `Category ID: ${doc.categoryId}`,
+            owner: `User #${doc.ownerUserId || 1}`,
+            version: "1.0",
+            classification: `Class #${doc.classificationId}`,
+            department: `Dept #${doc.departmentId}`,
+            createdOn: doc.createdAt
+              ? new Date(doc.createdAt).toLocaleDateString()
+              : "N/A",
+            fileUrl: samplePdf,
+            totalPages: 1,
+            description: `Document status: ${doc.status}. Created on system.`,
+            requestId: requestId,
+            request: doc.request || null,
+          };
+        });
+        setDocuments(formattedDocs);
       }
-      const data = await response.json();
 
-      // Transform raw API data into component format
-      const formattedData = Array.isArray(data)
-        ? data.map(mapApiDocumentToUI)
-        : [];
+      if (taskRes.data) {
+        const rawTaskArray = Array.isArray(taskRes.data)
+          ? taskRes.data
+          : [taskRes.data];
 
-      setDocuments(formattedData);
+        const formattedTasks = rawTaskArray.map((item) => {
+          const req = item.requestLevel?.request || {};
+          const level = item.requestLevel || {};
+
+          let computedStatus = "Pending";
+          if (item.status === "REJECTED" || item.isRejected)
+            computedStatus = "REJECTED";
+          else if (
+            item.status === "COMPLETED" ||
+            item.isApproved ||
+            item.status === "APPROVED"
+          )
+            computedStatus = "COMPLETED";
+          else if (item.status === "PENDING") computedStatus = "PENDING";
+
+          const extractedRequestId = req.requestId || level.requestId || null;
+
+          return {
+            id: item.requestApproverId
+              ? item.requestApproverId.toString()
+              : Math.random().toString(),
+            taskId: item.requestApproverId,
+            originalData: item,
+            title: item.title || "Management Approval",
+            type: level.approvalMode === "SEQUENTIAL" ? "Approval" : "Review",
+            docName: req.title || "Untitled Document",
+            docNo: req.requestNumber || `DOC-${req.documentId || "0000"}`,
+            workflow: `Workflow ID: ${req.workflowId || 1}`,
+            due: item.assignedOn
+              ? new Date(item.assignedOn).toLocaleDateString()
+              : "N/A",
+            priority: "High",
+            priorityColor: "bg-red-100 text-red-700 border-red-200",
+            status: computedStatus,
+            content: req.remarks || "No remarks provided.",
+            documentId: req.documentId,
+            fileUrl: req.fileUrl || samplePdf,
+            category: "General Governance",
+            owner: `User #${req.requestedBy || "1"}`,
+            version: "1.0",
+            classification: "Internal",
+            retention: "Standard",
+            department: "Operations",
+            createdOn: item.assignedOn
+              ? new Date(item.assignedOn).toLocaleDateString()
+              : "N/A",
+            totalPages: 1,
+            description: req.remarks || "Approval workflow request.",
+
+            requestId: extractedRequestId,
+            request: req,
+          };
+        });
+        setApprovalTasks(formattedTasks);
+      }
     } catch (err) {
-      console.error("Failed to load documents from API:", err);
-      setError("Failed to fetch documents. Please try again later.");
+      console.error("Error fetching initial data:", err);
+      setError("Failed to fetch documents and tasks. Please try again later.");
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchDocuments();
+    fetchAllData();
   }, []);
 
-  const handleSelectDoc = (doc) => {
-    setSelectedDoc(doc);
+  // const handleSelectDoc = (doc) => {
+  //   setSelectedDoc(doc);
+  //   setCurrentView("DETAIL");
+  // };
+
+  const handleSelectDoc = (item) => {
+    // Map or directly assign selected document ensuring requestId persists
+    const docToSelect = mapApiDocumentToUI(item);
+
+    // Fallback: If mapApiDocumentToUI didn't capture requestId, pull from original item
+    if (!docToSelect.requestId) {
+      docToSelect.requestId =
+        item.requestId ||
+        item.request?.requestId ||
+        item.requestLevel?.request?.requestId ||
+        null;
+    }
+
+    setSelectedDoc(docToSelect);
     setCurrentView("DETAIL");
   };
 
@@ -914,7 +1697,7 @@ export default function DocumentManagementModule() {
   const handleBackToList = () => {
     setSelectedDoc(null);
     setCurrentView("LIST");
-    fetchDocuments(); // Refresh list when returning from operations
+    // fetchDocuments(); // Refresh list when returning from operations
   };
 
   const handleVersionUploadSuccess = (payload) => {
@@ -932,6 +1715,7 @@ export default function DocumentManagementModule() {
       {currentView === "UPLOAD" && (
         <UploadDocumentView
           onCancel={handleBackToList}
+          showBackButton={true}
           onSubmitSuccess={handleBackToList}
         />
       )}
@@ -941,6 +1725,7 @@ export default function DocumentManagementModule() {
         <DocumentDetailView
           doc={selectedDoc}
           onBack={handleBackToList}
+          userId={userId}
           onOpenVersionModal={() => setIsVersionModalOpen(true)}
         />
       )}
@@ -949,10 +1734,13 @@ export default function DocumentManagementModule() {
       {currentView === "LIST" && (
         <DocumentsView
           documents={documents}
+          approvalTasks={approvalTasks}
           isLoading={isLoading}
           error={error}
           onSelectDoc={handleSelectDoc}
           onNavigateToUpload={handleNavigateToUpload}
+          fetchAllData={fetchAllData}
+          userId={userId}
         />
       )}
 

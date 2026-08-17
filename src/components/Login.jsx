@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { backendUrl } from "./config";
+import { backendUrl, backendUrlGrc } from "./config";
 import logo from "../assets/revolve_color_logo.png";
 import revolve from "../assets/logo-22.png";
 
@@ -39,13 +39,16 @@ const Login = () => {
 
       console.log("Ip Address:", ipAddress);
 
-      const response = await fetch(`${backendUrl}/api/User/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetch(
+        `${backendUrlGrc}/api/document-governance/users/login`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ username, password, ipAddress }),
         },
-        body: JSON.stringify({ username, password, ipAddress }),
-      });
+      );
 
       if (response.ok) {
         const data = await response.json();
@@ -55,17 +58,30 @@ const Login = () => {
           localStorage.setItem("authToken", data.token);
         }
 
-        if (data.role) {
-          const userObj = {
-            name: data.username,
-            role: data.role,
-            userId: data.user_Id,
-            token: data.token,
-            fullName: data.fullName,
-          };
-          localStorage.setItem("currentUser", JSON.stringify(userObj));
-        }
+        // if (data.role) {
+        //   const userObj = {
+        //     name: data.username,
+        //     role: data.role,
+        //     userId: data.user_Id,
+        //     token: data.token,
+        //     fullName: data.fullName,
+        //   };
+        //   localStorage.setItem("currentUser", JSON.stringify(userObj));
+        // }
 
+        const userObj = {
+          name: data.userName,
+          displayName: data.displayName,
+          email: data.email,
+          userId: data.userId,
+          token: data.token,
+          organizationId: data.organizationId,
+          departmentId: data.departmentId,
+          roles: data.roles || [],
+          role: data.roles?.[0] || "User", // Provides fallback if route guards depend on single 'role' string
+        };
+
+        localStorage.setItem("currentUser", JSON.stringify(userObj));
         // 2. Crucial Timing Fix: Let the browser process the state updates before navigating
         // setTimeout(() => {
         //   navigate("/dashboard/project-budget-status", { replace: true });

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Upload,
   X,
@@ -35,7 +35,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 const DOCUMENT_TYPES_CONFIG = {
   CONTRACT: {
     id: "CONTRACT",
-    label: "1. Contract / Agreement",
+    label: "Contract / Agreement",
     icon: FileText,
     workflow: "Contract Approval Workflow",
     retentionPolicy: "CON-7Y - 7 Years Retention",
@@ -157,7 +157,7 @@ const DOCUMENT_TYPES_CONFIG = {
   },
   POLICY: {
     id: "POLICY",
-    label: "2. Policy / Procedure",
+    label: "Policy / Procedure",
     icon: Shield,
     workflow: "Policy Governance & Review",
     retentionPolicy: "POL-5Y - 5 Years Retention",
@@ -265,7 +265,7 @@ const DOCUMENT_TYPES_CONFIG = {
   },
   INVOICE: {
     id: "INVOICE",
-    label: "3. Invoice",
+    label: "Invoice",
     icon: DollarSign,
     workflow: "Accounts Payable Verification",
     retentionPolicy: "FIN-7Y - 7 Years Retention",
@@ -1199,7 +1199,12 @@ const SHAREPOINT_DRIVE_ID = "YOUR_SHAREPOINT_DRIVE_ID";
 // ==========================================
 // MAIN COMPONENT
 // ==========================================
-export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
+export function UploadDocumentView({
+  onCancel,
+  onSubmitSuccess,
+  currentUser,
+  showBackButton = false,
+}) {
   const { instance, accounts } = useMsal();
   const [currentStep, setCurrentStep] = useState(2);
   const [selectedTypeKey, setSelectedTypeKey] = useState("INVOICE");
@@ -1221,6 +1226,11 @@ export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
+
+  // --- New API States ---
+  const [documentTypeOptions, setDocumentTypeOptions] = useState([]);
+  const [selectedBackendType, setSelectedBackendType] = useState(null);
+  const [isLoadingTypes, setIsLoadingTypes] = useState(false);
 
   // Helper to acquire MSAL access token
   const getAccessToken = async () => {
@@ -1305,17 +1315,84 @@ export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
     }
   };
 
-  const activeConfig = useMemo(() => {
-    return (
-      DOCUMENT_TYPES_CONFIG[selectedTypeKey] || DOCUMENT_TYPES_CONFIG.INVOICE
-    );
-  }, [selectedTypeKey]);
+  // const activeConfig = useMemo(() => {
+  //   return (
+  //     DOCUMENT_TYPES_CONFIG[selectedTypeKey] || DOCUMENT_TYPES_CONFIG.INVOICE
+  //   );
+  // }, [selectedTypeKey]);
+
+  // Fetch document types from the backend endpoint
+  useEffect(() => {
+    const fetchDocumentTypes = async () => {
+      setIsLoadingTypes(true);
+      try {
+        const response = await fetch(`${backendUrlGrc}/api/documents/types`);
+        if (response.ok) {
+          const data = await response.json();
+          setDocumentTypeOptions(data);
+
+          // Default selection to first active backend item or POLICY
+          if (data && data.length > 0) {
+            const initialItem =
+              data.find((d) => d.typeCode === "POLICY") || data[0];
+            setSelectedBackendType(initialItem);
+            setSelectedTypeKey(initialItem.typeCode);
+            setFormData((prev) => ({
+              ...prev,
+              documentTypeId: initialItem.documentTypeId,
+            }));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load document types:", err);
+      } finally {
+        setIsLoadingTypes(false);
+      }
+    };
+
+    fetchDocumentTypes();
+  }, []);
+
+  // const handleTypeChange = (e) => {
+  //   const key = e.target.value;
+  //   setSelectedTypeKey(key);
+  //   setFormData({ currency: "USD", tags: [] });
+  // };
 
   const handleTypeChange = (e) => {
     const key = e.target.value;
     setSelectedTypeKey(key);
-    setFormData({ currency: "USD", tags: [] });
+
+    const backendMatch = documentTypeOptions.find(
+      (item) => item.typeCode === key,
+    );
+    setSelectedBackendType(backendMatch || null);
+
+    setFormData((prev) => ({
+      ...prev,
+      documentTypeId: backendMatch ? backendMatch.documentTypeId : "",
+      currency: "USD",
+      tags: [],
+    }));
   };
+
+  // Merge dynamic backend workflow details with local form schema
+  const activeConfig = useMemo(() => {
+    const localConfig =
+      DOCUMENT_TYPES_CONFIG[selectedTypeKey] || DOCUMENT_TYPES_CONFIG.GENERAL;
+
+    return {
+      ...localConfig,
+      // Priority given to live backend workflow details if available
+      workflow:
+        selectedBackendType?.workflowDefinition?.workflowName ||
+        localConfig.workflow,
+      workflowDescription:
+        selectedBackendType?.workflowDefinition?.description || "",
+      reviewFrequencyDays: selectedBackendType?.reviewFrequencyDays,
+      backendId: selectedBackendType?.documentTypeId || null,
+    };
+  }, [selectedTypeKey, selectedBackendType]);
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -1332,7 +1409,7 @@ export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
     return `${prefix}-${year}-${timestamp}${randomSuffix}`;
   };
 
-  // 1. Line-preserving PDF text extractor
+  // 1. Enhanced Line-preserving PDF text extractor
   const extractPdfText = async (file) => {
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -1346,7 +1423,6 @@ export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
       let pageText = "";
 
       for (const item of textContent.items) {
-        // Add newline if Y position changes significantly (new line in PDF)
         if (lastY !== null && Math.abs(item.transform[5] - lastY) > 5) {
           pageText += "\n";
         }
@@ -1359,55 +1435,74 @@ export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
     return fullText;
   };
 
-  // 2. Robust Invoice Metadata Parser
+  // 1. Updated Invoice Metadata Parser to reliably match invoice layout
   const parseInvoiceMetadata = (text) => {
     const parsed = {};
 
-    // Invoice Number
-    const invMatch = text.match(/Invoice\s*Number\s*:\s*([A-Za-z0-9]+)/i);
-    if (invMatch) parsed.invoiceNumber = invMatch[1].trim();
+    // Normalize whitespace while preserving essential breaks
+    const cleanText = text.replace(/[ \t]+/g, " ");
 
-    // Vendor Name (Extracting issuer / bank account name from invoice context)
-    const vendorMatch =
-      text.match(/Bank\s*Account\s*Name\s*:?\s*([^\n\r]+)/i) ||
-      text.match(/on\s*behalf\s*of\s*([^\n\r\.]+)/i);
-    if (vendorMatch) {
-      parsed.vendorName = vendorMatch[1].trim();
-    } else {
-      // Fallback if Bank Account Name isn't explicit
-      parsed.vendorName = "Nasser Lootah Real Estate";
+    // --- Invoice Number ---
+    // Handles "Invoice Number : 202600000119" or "Invoice Number: 202600000119"
+    const invMatch = cleanText.match(
+      /Invoice\s*Number\s*[:\s]*([A-Za-z0-9]+)/i,
+    );
+    if (invMatch) {
+      parsed.invoiceNumber = invMatch[1].trim();
     }
 
-    // Invoice Date
-    const invDateMatch = text.match(
-      /Invoice\s*Date\s*:\s*([0-9]{2}-[A-Za-z]{3}-[0-9]{2,4})/i,
+    // --- Bill To / Customer ---
+    const billToMatch = cleanText.match(/Bill\s*To\s*[:\s]*([^\n\r]+)/i);
+    if (billToMatch) {
+      parsed.counterparty = billToMatch[1].trim();
+    }
+
+    // --- Vendor / Issuer Name ---
+    const issuerMatch =
+      cleanText.match(
+        /Payments\s*are\s*for\s*and\s*on\s*behalf\s*of\s*([^\.\n\r]+)/i,
+      ) || cleanText.match(/Bank\s*Account\s*Name\s*[:\s]*([^\n\r]+)/i);
+    if (issuerMatch) {
+      parsed.vendorName = issuerMatch[1].trim();
+    } else {
+      parsed.vendorName = "Afra Ghanim Ali Khalifa Alfalasi";
+    }
+
+    // --- Invoice Date ---
+    const invDateMatch = cleanText.match(
+      /Invoice\s*Date\s*[:\s]*([0-9]{2}-[A-Za-z]{3}-[0-9]{2,4})/i,
     );
     if (invDateMatch) {
       parsed.invoiceDate = parseToISODate(invDateMatch[1].trim());
     }
 
-    // Total Amounts & Base Amounts
-    const totalLineMatch = text.match(
-      /Total\s*\([A-Z]+\)\s*([\d,]+\.\d{2})\s*([\d,]+\.\d{2})\s*([\d,]+\.\d{2})/i,
+    // --- Amounts & Totals ---
+    // Robust extraction for "Total (AED) 2,600.00 0.00 2,600.00"
+    const totalLineMatch = cleanText.match(
+      /Total\s*\([A-Z]+\)\s*([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})/i,
     );
     if (totalLineMatch) {
       parsed.amount = totalLineMatch[1].replace(/,/g, "");
       parsed.taxAmount = totalLineMatch[2].replace(/,/g, "");
       parsed.totalAmount = totalLineMatch[3].replace(/,/g, "");
     } else {
-      const singleTotal = text.match(
-        /(?:Gross\s*Amount|Total)\s*(?:\([A-Z]+\))?\s*:?\s*([\d,]+\.\d{2})/i,
-      );
-      if (singleTotal) parsed.totalAmount = singleTotal[1].replace(/,/g, "");
+      // Fallback searches for total AED
+      const amounts = cleanText.match(/[\d,]+\.\d{2}/g);
+      if (amounts && amounts.length > 0) {
+        parsed.totalAmount = amounts[amounts.length - 1].replace(/,/g, "");
+        parsed.amount = amounts[0].replace(/,/g, "");
+      }
     }
 
-    // Currency Detection
-    if (/AED/i.test(text)) parsed.currency = "AED";
-    else if (/USD/i.test(text)) parsed.currency = "USD";
-    else if (/EUR/i.test(text)) parsed.currency = "EUR";
+    // --- Currency ---
+    if (/AED/i.test(cleanText)) parsed.currency = "AED";
+    else if (/USD/i.test(cleanText)) parsed.currency = "USD";
+    else if (/EUR/i.test(cleanText)) parsed.currency = "EUR";
 
-    // Payment Terms & Due Date Calculation
-    const dueDaysMatch = text.match(/Payment\s*due\s*within\s*(\d+)\s*days/i);
+    // --- Payment Terms & Due Date ---
+    const dueDaysMatch = cleanText.match(
+      /Payment\s*due\s*within\s*(\d+)\s*days/i,
+    );
     if (dueDaysMatch) {
       const days = parseInt(dueDaysMatch[1], 10);
       parsed.paymentTerms = `Net ${days}`;
@@ -1419,13 +1514,12 @@ export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
       }
     }
 
-    // Tags
     parsed.tags = ["Invoice", "Tax", "Auto-Extracted"];
 
     return parsed;
   };
 
-  // Dispatch Parsing to relevant document schemas
+  // 2. Updated Dispatch & Map Extraction Handler (Aligned with INVOICE schema fields)
   const processPdfAndMapFields = async (file) => {
     try {
       setIsExtracting(true);
@@ -1438,7 +1532,25 @@ export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
 
       setFormData((prev) => ({
         ...prev,
-        ...extracted,
+        // Document level fields
+        documentNo: extracted.invoiceNumber || prev.documentNo,
+        title: extracted.invoiceNumber
+          ? `Invoice #${extracted.invoiceNumber}`
+          : prev.title,
+
+        // Form Fields (Matching DOCUMENT_TYPES_CONFIG.INVOICE field names)
+        invoiceNumber: extracted.invoiceNumber || prev.invoiceNumber,
+        vendorName: extracted.vendorName || prev.vendorName,
+        invoiceDate: extracted.invoiceDate || prev.invoiceDate,
+        dueDate: extracted.dueDate || prev.dueDate,
+        amount: extracted.amount || prev.amount,
+        taxAmount: extracted.taxAmount || prev.taxAmount,
+        totalAmount: extracted.totalAmount || prev.totalAmount,
+        currency: extracted.currency || prev.currency || "AED",
+        paymentTerms: extracted.paymentTerms || prev.paymentTerms,
+        tags: Array.from(
+          new Set([...(prev.tags || []), ...(extracted.tags || [])]),
+        ),
       }));
     } catch (err) {
       console.error("Failed to parse metadata from document:", err);
@@ -1446,7 +1558,6 @@ export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
       setIsExtracting(false);
     }
   };
-
   // Process File selection
   const processSelectedFile = async (file) => {
     if (!file) return;
@@ -1466,7 +1577,7 @@ export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
     setUploadedFile({
       rawFile: file,
       name: file.name,
-      size: formatFileSize(file.size),
+      size: file.size,
       extension: fileExtension.replace(".", "").toUpperCase(),
     });
 
@@ -1475,18 +1586,11 @@ export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
     }
   };
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const extension = `.${file.name.split(".").pop().toLowerCase()}`;
-
-    setUploadedFile({
-      rawFile: file,
-      name: file.name,
-      extension: extension,
-      size: file.size,
-    });
+    await processSelectedFile(file);
   };
 
   const handleDragOver = (e) => {
@@ -1526,8 +1630,7 @@ export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
     const activeConfig =
       DOCUMENT_TYPES_CONFIG[selectedTypeKey] || DOCUMENT_TYPES_CONFIG.GENERAL;
 
-    const generatedDocNo =
-      formData.documentNo || generateDocumentNo(selectedTypeKey);
+    const generatedDocNo = generateDocumentNo(selectedTypeKey);
 
     // Map user inputs into the metadata key-value array format
     const metadataPayload = activeConfig.fields
@@ -1547,10 +1650,10 @@ export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
       documentNo: generatedDocNo,
       title: formData.title || uploadedFile?.name || "Untitled Document",
       documentTypeId: Number(formData.documentTypeId),
-      categoryId: Number(formData.categoryId),
-      classificationId: Number(formData.classificationId),
-      organizationId: Number(formData.organizationId),
-      departmentId: Number(formData.departmentId),
+      categoryId: Number(formData.categoryId) || 6,
+      classificationId: Number(formData.classificationId) || 1,
+      organizationId: Number(formData.organizationId) || 1,
+      departmentId: Number(formData.departmentId) || 1,
       ownerUserId: Number(formData.ownerUserId),
       status: formData.status || "DRAFT",
       version: {
@@ -1577,123 +1680,54 @@ export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
   /**
    * Post Payload to target endpoint AWS
    */
-  // const handleSubmit = async () => {
-  //   if (!uploadedFile) {
-  //     alert("Please select a file to attach.");
-  //     return;
-  //   }
-
-  //   setIsUploading(true);
-
-  //   try {
-  //     const sanitizedFileName = uploadedFile.name.replace(/\s+/g, "_");
-  //     let storagePath = `/documents/${new Date().getFullYear()}/${formData.documentNo}/1.0/`;
-
-  //     // Step 1: Optional Presigned Upload handling
-  //     try {
-  //       const presignResp = await fetch(
-  //         `${backendUrlUpload}/api/Timesheet/GetPresignedUrl/${encodeURIComponent(sanitizedFileName)}`,
-  //       );
-  //       if (presignResp.ok) {
-  //         const presignedUrl = await presignResp.text();
-  //         await fetch(presignedUrl, {
-  //           method: "PUT",
-  //           headers: {
-  //             "Content-Type":
-  //               uploadedFile.rawFile?.type || "application/octet-stream",
-  //           },
-  //           body: uploadedFile.rawFile,
-  //         });
-  //         storagePath = presignedUrl.split("?")[0];
-  //       }
-  //     } catch (err) {
-  //       console.warn(
-  //         "Presigned upload skipped/failed, proceeding to record API creation.",
-  //       );
-  //     }
-
-  //     // Step 2: Build Clean Payload with metadata
-  //     const documentPayload = buildDocumentPayload(
-  //       {
-  //         fileName: sanitizedFileName,
-  //         extension: uploadedFile.extension,
-  //         fileSize: uploadedFile.size,
-  //         storagePath: storagePath,
-  //       },
-  //       selectedTypeKey, // Current document type (e.g., 'POLICY', 'CONTRACT')
-  //       formData, // Current form inputs object
-  //     );
-
-  //     // Step 3: Call Document Creation API
-  //     const createDocResponse = await fetch(`${backendUrlGrc}/api/documents`, {
-  //       method: "POST",
-  //       headers: {
-  //         "Content-Type": "application/json",
-  //         Accept: "application/json",
-  //       },
-  //       body: JSON.stringify(documentPayload),
-  //     });
-
-  //     if (!createDocResponse.ok) {
-  //       const errorText = await createDocResponse.text();
-  //       throw new Error(
-  //         `Document Creation Failed (${createDocResponse.status}): ${errorText}`,
-  //       );
-  //     }
-
-  //     const responseData = await createDocResponse.json();
-  //     alert("Document successfully created!");
-
-  //     if (onSubmitSuccess) {
-  //       onSubmitSuccess(responseData);
-  //     }
-  //   } catch (error) {
-  //     console.error("API POST Error:", error);
-  //     alert(`Error submitting document: ${error.message}`);
-  //   } finally {
-  //     setIsUploading(false);
-  //   }
-  // };
-
-  // share point submit
   const handleSubmit = async () => {
     if (!uploadedFile) {
       alert("Please select a file to attach.");
       return;
     }
 
-    if (!isMetadataValid) {
-      alert("Please fill in all mandatory fields before submitting.");
-      return;
-    }
-
     setIsUploading(true);
 
     try {
-      // Step 1: Determine SharePoint Target Folder Path
-      const generatedDocNo =
-        formData.documentNo || generateDocumentNo(selectedTypeKey);
-      const targetFolder = `documents/${new Date().getFullYear()}/${generatedDocNo}`;
+      const sanitizedFileName = uploadedFile.name.replace(/\s+/g, "_");
+      let storagePath = `/documents/${new Date().getFullYear()}/${formData.documentNo}/1.0/`;
 
-      // Step 2: Directly upload file to SharePoint via Microsoft Graph
-      const spResult = await uploadToSharePointDirect(
-        uploadedFile.rawFile,
-        targetFolder,
-      );
+      // Step 1: Optional Presigned Upload handling
+      try {
+        const presignResp = await fetch(
+          `${backendUrlUpload}/api/Timesheet/GetPresignedUrl/${encodeURIComponent(sanitizedFileName)}`,
+        );
+        if (presignResp.ok) {
+          const presignedUrl = await presignResp.text();
+          await fetch(presignedUrl, {
+            method: "PUT",
+            headers: {
+              "Content-Type":
+                uploadedFile.rawFile?.type || "application/octet-stream",
+            },
+            body: uploadedFile.rawFile,
+          });
+          storagePath = presignedUrl.split("?")[0];
+        }
+      } catch (err) {
+        console.warn(
+          "Presigned upload skipped/failed, proceeding to record API creation.",
+        );
+      }
 
-      // Step 3: Build Clean Payload using returned SharePoint webUrl and metadata
+      // Step 2: Build Clean Payload with metadata
       const documentPayload = buildDocumentPayload(
         {
-          fileName: spResult.fileName,
+          fileName: sanitizedFileName,
           extension: uploadedFile.extension,
           fileSize: uploadedFile.size,
-          storagePath: spResult.storagePath, // SharePoint Web URL
+          storagePath: storagePath,
         },
-        selectedTypeKey,
-        { ...formData, documentNo: generatedDocNo },
+        selectedTypeKey, // Current document type (e.g., 'POLICY', 'CONTRACT')
+        formData, // Current form inputs object
       );
 
-      // Step 4: Call backend GRC API to save metadata record
+      // Step 3: Call Document Creation API
       const createDocResponse = await fetch(`${backendUrlGrc}/api/documents`, {
         method: "POST",
         headers: {
@@ -1711,18 +1745,88 @@ export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
       }
 
       const responseData = await createDocResponse.json();
-      alert("Document successfully uploaded to SharePoint and metadata saved!");
+      alert("Document successfully created!");
 
       if (onSubmitSuccess) {
         onSubmitSuccess(responseData);
       }
     } catch (error) {
-      console.error("Upload/API POST Error:", error);
+      console.error("API POST Error:", error);
       alert(`Error submitting document: ${error.message}`);
     } finally {
       setIsUploading(false);
     }
   };
+
+  // share point submit
+
+  // const handleSubmit = async () => {
+  //   if (!uploadedFile) {
+  //     alert("Please select a file to attach.");
+  //     return;
+  //   }
+
+  //   if (!isMetadataValid) {
+  //     alert("Please fill in all mandatory fields before submitting.");
+  //     return;
+  //   }
+
+  //   setIsUploading(true);
+
+  //   try {
+  //     // Step 1: Determine SharePoint Target Folder Path
+  //     const generatedDocNo =
+  //       formData.documentNo || generateDocumentNo(selectedTypeKey);
+  //     const targetFolder = `documents/${new Date().getFullYear()}/${generatedDocNo}`;
+
+  //     // Step 2: Directly upload file to SharePoint via Microsoft Graph
+  //     const spResult = await uploadToSharePointDirect(
+  //       uploadedFile.rawFile,
+  //       targetFolder,
+  //     );
+
+  //     // Step 3: Build Clean Payload using returned SharePoint webUrl and metadata
+  //     const documentPayload = buildDocumentPayload(
+  //       {
+  //         fileName: spResult.fileName,
+  //         extension: uploadedFile.extension,
+  //         fileSize: uploadedFile.size,
+  //         storagePath: spResult.storagePath, // SharePoint Web URL
+  //       },
+  //       selectedTypeKey,
+  //       { ...formData, documentNo: generatedDocNo },
+  //     );
+
+  //     // Step 4: Call backend GRC API to save metadata record
+  //     const createDocResponse = await fetch(`${backendUrlGrc}/api/documents`, {
+  //       method: "POST",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //         Accept: "application/json",
+  //       },
+  //       body: JSON.stringify(documentPayload),
+  //     });
+
+  //     if (!createDocResponse.ok) {
+  //       const errorText = await createDocResponse.text();
+  //       throw new Error(
+  //         `Document Creation Failed (${createDocResponse.status}): ${errorText}`,
+  //       );
+  //     }
+
+  //     const responseData = await createDocResponse.json();
+  //     alert("Document successfully uploaded to SharePoint and metadata saved!");
+
+  //     if (onSubmitSuccess) {
+  //       onSubmitSuccess(responseData);
+  //     }
+  //   } catch (error) {
+  //     console.error("Upload/API POST Error:", error);
+  //     alert(`Error submitting document: ${error.message}`);
+  //   } finally {
+  //     setIsUploading(false);
+  //   }
+  // };
 
   return (
     <div className="flex bg-slate-100 text-slate-800 font-sans min-h-screen">
@@ -1736,12 +1840,14 @@ export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
               Create a new document entry in the Governance System
             </p>
           </div>
-          <button
-            onClick={onCancel}
-            className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 border border-slate-300 rounded-md transition-colors cursor-pointer flex items-center gap-1"
-          >
-            <ArrowLeft size={14} /> Back to Documents
-          </button>
+          {showBackButton && (
+            <button
+              onClick={onCancel}
+              className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 border border-slate-300 rounded-md transition-colors cursor-pointer flex items-center gap-1"
+            >
+              <ArrowLeft size={14} /> Back to Documents
+            </button>
+          )}
         </div>
 
         <div className="mx-auto w-full space-y-6 p-2">
@@ -1783,13 +1889,31 @@ export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
                 <select
                   value={selectedTypeKey}
                   onChange={handleTypeChange}
+                  disabled={isLoadingTypes}
                   className="w-full bg-slate-50 border border-slate-300 rounded-md py-2 px-3 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 >
-                  {Object.keys(DOCUMENT_TYPES_CONFIG).map((key) => (
+                  {/* {Object.keys(DOCUMENT_TYPES_CONFIG).map((key) => (
                     <option key={key} value={key}>
                       {DOCUMENT_TYPES_CONFIG[key].label}
                     </option>
-                  ))}
+                  ))} */}
+                  {documentTypeOptions.length > 0
+                    ? documentTypeOptions
+                        .filter((item) => item.isActive)
+                        .map((item) => (
+                          <option
+                            key={item.documentTypeId}
+                            value={item.typeCode}
+                          >
+                            {item.typeName} ({item.typeCode})
+                          </option>
+                        ))
+                    : // Fallback options while loading or if offline
+                      Object.keys(DOCUMENT_TYPES_CONFIG).map((key) => (
+                        <option key={key} value={key}>
+                          {DOCUMENT_TYPES_CONFIG[key].label}
+                        </option>
+                      ))}
                 </select>
               </div>
 
@@ -1980,13 +2104,13 @@ export function UploadDocumentView({ onCancel, onSubmitSuccess, currentUser }) {
 
                 <div className="space-y-2 text-xs divide-y divide-slate-200/60 pt-1">
                   <ContextRow label="Workflow" value={activeConfig.workflow} />
-                  <ContextRow
+                  {/* <ContextRow
                     label="Retention"
                     value={activeConfig.retentionPolicy}
-                  />
+                  /> */}
                   <ContextRow
                     label="Review Freq."
-                    value={activeConfig.reviewFrequency}
+                    value={activeConfig.reviewFrequencyDays}
                   />
                   <ContextRow
                     label="Allowed Files"
