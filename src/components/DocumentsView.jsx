@@ -43,7 +43,7 @@ import { UploadDocumentView } from "./UploadDocumentView";
 import { DocumentVersionUploadModal } from "./DocumentVersionUploadModal";
 import { PdfViewer } from "./PdfViewer";
 
-import samplePdf from "../assets/DeltekCostpoint82ExtensibilityDesignerCodingGuide.pdf";
+import samplePdf from "../assets/Tax_Inv_202600000119_105.pdf";
 import { TasksView } from "./TasksView";
 import { backendUrlGrc } from "./config";
 import axios from "axios";
@@ -1085,7 +1085,7 @@ export function DocumentDetailView({
           >
             <Download size={14} /> Download
           </button>
-          <button
+          {/* <button
             onClick={() => alert(`Editing ${doc.number}`)}
             className="border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs px-3 py-1.5 rounded flex items-center gap-1 font-medium cursor-pointer"
           >
@@ -1093,7 +1093,7 @@ export function DocumentDetailView({
           </button>
           <button className="border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 p-1.5 rounded">
             <MoreVertical size={14} />
-          </button>
+          </button> */}
         </div>
       </div>
 

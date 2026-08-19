@@ -19,7 +19,14 @@ import {
   Sparkles,
   Loader2,
 } from "lucide-react";
-import { backendUrlGrc, backendUrlUpload, loginRequest } from "./config";
+import {
+  AzureClientId,
+  AzureSecret,
+  AzureTenantId,
+  backendUrlGrc,
+  backendUrlUpload,
+  loginRequest,
+} from "./config";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
@@ -1232,65 +1239,186 @@ export function UploadDocumentView({
   const [selectedBackendType, setSelectedBackendType] = useState(null);
   const [isLoadingTypes, setIsLoadingTypes] = useState(false);
 
-  // Helper to acquire MSAL access token
-  const getAccessToken = async () => {
-    const account = accounts[0];
-    if (!account) {
-      throw new Error("No active Microsoft account. Please log in.");
-    }
+  // // Helper to acquire MSAL access token
+  // const getAccessToken = async () => {
+  //   const account = accounts[0];
+  //   if (!account) {
+  //     throw new Error("No active Microsoft account. Please log in.");
+  //   }
 
-    try {
-      const response = await instance.acquireTokenSilent({
-        ...loginRequest,
-        account,
-      });
-      return response.accessToken;
-    } catch (err) {
-      const response = await instance.acquireTokenPopup(loginRequest);
-      return response.accessToken;
-    }
-  };
+  //   try {
+  //     const response = await instance.acquireTokenSilent({
+  //       ...loginRequest,
+  //       account,
+  //     });
+  //     return response.accessToken;
+  //   } catch (err) {
+  //     const response = await instance.acquireTokenPopup(loginRequest);
+  //     return response.accessToken;
+  //   }
+  // };
 
-  // Upload file directly to SharePoint via Graph API
-  const uploadToSharePointDirect = async (file, targetFolder) => {
-    const accessToken = await getAccessToken();
+  // // Upload file directly to SharePoint via Graph API
+  // const uploadToSharePointDirect = async (file, targetFolder) => {
+  //   const accessToken = await getAccessToken();
 
-    const graphClient = Client.init({
-      authProvider: (done) => done(null, accessToken),
+  //   const graphClient = Client.init({
+  //     authProvider: (done) => done(null, accessToken),
+  //   });
+
+  //   const sanitizedFileName = `${file.name.replace(/\.[^/.]+$/, "")}_${Date.now()}.${file.name.split(".").pop()}`;
+  //   const itemPath = `${targetFolder}/${sanitizedFileName}`;
+
+  //   // 1. Small File Upload (<= 4MB)
+  //   if (file.size <= 4 * 1024 * 1024) {
+  //     const response = await graphClient
+  //       .api(`/drives/${SHAREPOINT_DRIVE_ID}/root:/${itemPath}:/content`)
+  //       .put(file);
+
+  //     return {
+  //       fileName: sanitizedFileName,
+  //       storagePath: response.webUrl,
+  //       spItemId: response.id,
+  //     };
+  //   }
+
+  //   // 2. Large File Upload (> 4MB) via Upload Session
+  //   const session = await graphClient
+  //     .api(
+  //       `/drives/${SHAREPOINT_DRIVE_ID}/root:/${itemPath}:/createUploadSession`,
+  //     )
+  //     .post({ item: { "@microsoft.graph.conflictBehavior": "rename" } });
+
+  //   const uploadUrl = session.uploadUrl;
+  //   const minChunkSize = 320 * 1024; // 320 KB chunks
+  //   let start = 0;
+
+  //   while (start < file.size) {
+  //     const end = Math.min(start + minChunkSize, file.size);
+  //     const chunk = file.slice(start, end);
+
+  //     const response = await fetch(uploadUrl, {
+  //       method: "PUT",
+  //       headers: {
+  //         "Content-Range": `bytes ${start}-${end - 1}/${file.size}`,
+  //       },
+  //       body: chunk,
+  //     });
+
+  //     if (!response.ok) {
+  //       throw new Error(`Upload failed at byte range ${start}-${end}`);
+  //     }
+
+  //     const resData = await response.json();
+  //     if (resData.id) {
+  //       return {
+  //         fileName: sanitizedFileName,
+  //         storagePath: resData.webUrl,
+  //         spItemId: resData.id,
+  //       };
+  //     }
+
+  //     start = end;
+  //   }
+  // };
+
+  const SHAREPOINT_DRIVE_ID = "D";
+
+  const getAccessTokenWithSecret = async () => {
+    const tokenEndpoint = `https://login.microsoftonline.com/${AzureTenantId}/oauth2/v2.0/token`;
+
+    const params = new URLSearchParams();
+    params.append("grant_type", "client_credentials");
+    params.append("client_id", AzureClientId);
+    params.append("client_secret", AzureSecret);
+    params.append("scope", "https://graph.microsoft.com/.default");
+
+    const response = await fetch(tokenEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
     });
 
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(
+        `Azure Token Error: ${errorData.error_description || response.statusText}`,
+      );
+    }
+
+    const data = await response.json();
+    return data.access_token;
+  };
+
+  // 3. Helper to upload directly to SharePoint via Graph API
+  const uploadToSharePointDirect = async (file, targetFolder) => {
+    // Obtain app token using Secret
+    const accessToken = await getAccessTokenWithSecret();
+
+    // Sanitize filename to avoid collisions
     const sanitizedFileName = `${file.name.replace(/\.[^/.]+$/, "")}_${Date.now()}.${file.name.split(".").pop()}`;
     const itemPath = `${targetFolder}/${sanitizedFileName}`;
 
-    // 1. Small File Upload (<= 4MB)
+    // SMALL FILE UPLOAD (<= 4MB)
     if (file.size <= 4 * 1024 * 1024) {
-      const response = await graphClient
-        .api(`/drives/${SHAREPOINT_DRIVE_ID}/root:/${itemPath}:/content`)
-        .put(file);
+      const uploadUrl = `https://graph.microsoft.com/v1.0/drives/${SHAREPOINT_DRIVE_ID}/root:/${itemPath}:/content`;
 
+      const response = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": file.type || "application/octet-stream",
+        },
+        body: file,
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`SharePoint Upload Failed: ${errText}`);
+      }
+
+      const data = await response.json();
       return {
         fileName: sanitizedFileName,
-        storagePath: response.webUrl,
-        spItemId: response.id,
+        storagePath: data.webUrl,
+        spItemId: data.id,
       };
     }
 
-    // 2. Large File Upload (> 4MB) via Upload Session
-    const session = await graphClient
-      .api(
-        `/drives/${SHAREPOINT_DRIVE_ID}/root:/${itemPath}:/createUploadSession`,
-      )
-      .post({ item: { "@microsoft.graph.conflictBehavior": "rename" } });
+    // LARGE FILE UPLOAD (> 4MB using Upload Session)
+    const sessionUrl = `https://graph.microsoft.com/v1.0/drives/${SHAREPOINT_DRIVE_ID}/root:/${itemPath}:/createUploadSession`;
 
-    const uploadUrl = session.uploadUrl;
-    const minChunkSize = 320 * 1024; // 320 KB chunks
+    const sessionResponse = await fetch(sessionUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        item: {
+          "@microsoft.graph.conflictBehavior": "rename",
+        },
+      }),
+    });
+
+    if (!sessionResponse.ok) {
+      const errText = await sessionResponse.text();
+      throw new Error(`Failed to create Upload Session: ${errText}`);
+    }
+
+    const sessionData = await sessionResponse.json();
+    const uploadUrl = sessionData.uploadUrl;
+
+    const chunkSize = 320 * 1024 * 10; // 3.2 MB chunks
     let start = 0;
 
     while (start < file.size) {
-      const end = Math.min(start + minChunkSize, file.size);
+      const end = Math.min(start + chunkSize, file.size);
       const chunk = file.slice(start, end);
 
-      const response = await fetch(uploadUrl, {
+      const chunkResponse = await fetch(uploadUrl, {
         method: "PUT",
         headers: {
           "Content-Range": `bytes ${start}-${end - 1}/${file.size}`,
@@ -1298,12 +1426,14 @@ export function UploadDocumentView({
         body: chunk,
       });
 
-      if (!response.ok) {
-        throw new Error(`Upload failed at byte range ${start}-${end}`);
+      if (!chunkResponse.ok) {
+        const errText = await chunkResponse.text();
+        throw new Error(`Chunk upload failed at byte ${start}: ${errText}`);
       }
 
-      const resData = await response.json();
+      const resData = await chunkResponse.json();
       if (resData.id) {
+        // Completed upload
         return {
           fileName: sanitizedFileName,
           storagePath: resData.webUrl,
@@ -1677,57 +1807,35 @@ export function UploadDocumentView({
     };
   };
 
-  /**
-   * Post Payload to target endpoint AWS
-   */
   const handleSubmit = async () => {
-    if (!uploadedFile) {
+    if (!uploadedFile?.rawFile) {
       alert("Please select a file to attach.");
+      return;
+    }
+
+    if (!isMetadataValid) {
+      alert("Please fill in all mandatory fields before submitting.");
       return;
     }
 
     setIsUploading(true);
 
     try {
-      const sanitizedFileName = uploadedFile.name.replace(/\s+/g, "_");
-      let storagePath = `/documents/${new Date().getFullYear()}/${formData.documentNo}/1.0/`;
+      const generatedDocNo =
+        formData.documentNo || generateDocumentNo(selectedTypeKey);
 
-      // Step 1: Optional Presigned Upload handling
-      try {
-        const presignResp = await fetch(
-          `${backendUrlUpload}/api/Timesheet/GetPresignedUrl/${encodeURIComponent(sanitizedFileName)}`,
-        );
-        if (presignResp.ok) {
-          const presignedUrl = await presignResp.text();
-          await fetch(presignedUrl, {
-            method: "PUT",
-            headers: {
-              "Content-Type":
-                uploadedFile.rawFile?.type || "application/octet-stream",
-            },
-            body: uploadedFile.rawFile,
-          });
-          storagePath = presignedUrl.split("?")[0];
-        }
-      } catch (err) {
-        console.warn(
-          "Presigned upload skipped/failed, proceeding to record API creation.",
-        );
-      }
-
-      // Step 2: Build Clean Payload with metadata
+      // 1. Build Metadata Payload
       const documentPayload = buildDocumentPayload(
         {
-          fileName: sanitizedFileName,
+          fileName: uploadedFile.rawFile.name,
           extension: uploadedFile.extension,
           fileSize: uploadedFile.size,
-          storagePath: storagePath,
         },
-        selectedTypeKey, // Current document type (e.g., 'POLICY', 'CONTRACT')
-        formData, // Current form inputs object
+        selectedTypeKey,
+        { ...formData, documentNo: generatedDocNo },
       );
 
-      // Step 3: Call Document Creation API
+      // 2. Save metadata to backend DB
       const createDocResponse = await fetch(`${backendUrlGrc}/api/documents`, {
         method: "POST",
         headers: {
@@ -1740,28 +1848,152 @@ export function UploadDocumentView({
       if (!createDocResponse.ok) {
         const errorText = await createDocResponse.text();
         throw new Error(
-          `Document Creation Failed (${createDocResponse.status}): ${errorText}`,
+          `Document Metadata Creation Failed (${createDocResponse.status}): ${errorText}`,
         );
       }
 
-      const responseData = await createDocResponse.json();
-      alert("Document successfully created!");
+      const createdDoc = await createDocResponse.json();
+      const documentId = createdDoc.documentId || createdDoc.id;
+
+      if (!documentId) {
+        throw new Error("Backend did not return a valid document ID.");
+      }
+
+      // 3. Prepare Form Data for File Upload
+      const fileFormData = new FormData();
+      fileFormData.append("file", uploadedFile.rawFile);
+
+      // 4. Upload file to /api/documents/{id}/upload
+      const uploadResponse = await fetch(
+        `${backendUrlGrc}/api/documents/${documentId}/upload`,
+        {
+          method: "POST",
+          body: fileFormData,
+        },
+      );
+
+      if (!uploadResponse.ok) {
+        const uploadErrorText = await uploadResponse.text();
+        throw new Error(
+          `File Upload Failed (${uploadResponse.status}): ${uploadErrorText}`,
+        );
+      }
+
+      // 5. Parse upload response containing storagePath, webUrl, etc.
+      const uploadResult = await uploadResponse.json();
+
+      // Extract storagePath from response body
+      const storagePath = uploadResult.storagePath;
+      const webUrl = uploadResult.webUrl;
+
+      // Display message with storage path
+      alert(
+        `File uploaded successfully!\n\nDocument ID: ${documentId}\nStorage Path: ${storagePath}`,
+      );
 
       if (onSubmitSuccess) {
-        onSubmitSuccess(responseData);
+        onSubmitSuccess({
+          ...createdDoc,
+          storagePath: storagePath,
+          webUrl: webUrl,
+          uploadDetails: uploadResult,
+        });
       }
+      fetchAllDocuments(); // Refresh document list after successful submission
     } catch (error) {
-      console.error("API POST Error:", error);
+      console.error("Submission Error:", error);
       alert(`Error submitting document: ${error.message}`);
     } finally {
       setIsUploading(false);
     }
   };
 
-  // share point submit
-
+  /**
+   * Post Payload to target endpoint AWS
+   */
   // const handleSubmit = async () => {
   //   if (!uploadedFile) {
+  //     alert("Please select a file to attach.");
+  //     return;
+  //   }
+
+  //   setIsUploading(true);
+
+  //   try {
+  //     const sanitizedFileName = uploadedFile.name.replace(/\s+/g, "_");
+  //     let storagePath = `/documents/${new Date().getFullYear()}/${formData.documentNo}/1.0/`;
+
+  //     // Step 1: Optional Presigned Upload handling
+  //     try {
+  //       const presignResp = await fetch(
+  //         `${backendUrlUpload}/api/Timesheet/GetPresignedUrl/${encodeURIComponent(sanitizedFileName)}`,
+  //       );
+  //       if (presignResp.ok) {
+  //         const presignedUrl = await presignResp.text();
+  //         await fetch(presignedUrl, {
+  //           method: "PUT",
+  //           headers: {
+  //             "Content-Type":
+  //               uploadedFile.rawFile?.type || "application/octet-stream",
+  //           },
+  //           body: uploadedFile.rawFile,
+  //         });
+  //         storagePath = presignedUrl.split("?")[0];
+  //       }
+  //     } catch (err) {
+  //       console.warn(
+  //         "Presigned upload skipped/failed, proceeding to record API creation.",
+  //       );
+  //     }
+
+  //     // Step 2: Build Clean Payload with metadata
+  //     const documentPayload = buildDocumentPayload(
+  //       {
+  //         fileName: sanitizedFileName,
+  //         extension: uploadedFile.extension,
+  //         fileSize: uploadedFile.size,
+  //         storagePath: storagePath,
+  //       },
+  //       selectedTypeKey, // Current document type (e.g., 'POLICY', 'CONTRACT')
+  //       formData, // Current form inputs object
+  //     );
+
+  //     // Step 3: Call Document Creation API
+  //     const createDocResponse = await fetch(`${backendUrlGrc}/api/documents`, {
+  //       method: "POST",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //         Accept: "application/json",
+  //       },
+  //       body: JSON.stringify(documentPayload),
+  //     });
+
+  //     if (!createDocResponse.ok) {
+  //       const errorText = await createDocResponse.text();
+  //       throw new Error(
+  //         `Document Creation Failed (${createDocResponse.status}): ${errorText}`,
+  //       );
+  //     }
+
+  //     const responseData = await createDocResponse.json();
+  //     alert("Document successfully created!");
+
+  //     if (onSubmitSuccess) {
+  //       onSubmitSuccess(responseData);
+  //     }
+  //   } catch (error) {
+  //     console.error("API POST Error:", error);
+  //     alert(`Error submitting document: ${error.message}`);
+  //   } finally {
+  //     setIsUploading(false);
+  //   }
+  // };
+
+  // share point submit
+
+  // 4. Update handleSubmit in your React Component
+  // const handleSubmit = async () => {
+  //   if (!uploadedFile?.rawFile) {
   //     alert("Please select a file to attach.");
   //     return;
   //   }
@@ -1774,30 +2006,30 @@ export function UploadDocumentView({
   //   setIsUploading(true);
 
   //   try {
-  //     // Step 1: Determine SharePoint Target Folder Path
+  //     // Step 1: Target path in SharePoint
   //     const generatedDocNo =
   //       formData.documentNo || generateDocumentNo(selectedTypeKey);
   //     const targetFolder = `documents/${new Date().getFullYear()}/${generatedDocNo}`;
 
-  //     // Step 2: Directly upload file to SharePoint via Microsoft Graph
+  //     // Step 2: Directly upload file to SharePoint using Secret Key token
   //     const spResult = await uploadToSharePointDirect(
   //       uploadedFile.rawFile,
   //       targetFolder,
   //     );
 
-  //     // Step 3: Build Clean Payload using returned SharePoint webUrl and metadata
+  //     // Step 3: Build Payload
   //     const documentPayload = buildDocumentPayload(
   //       {
   //         fileName: spResult.fileName,
   //         extension: uploadedFile.extension,
   //         fileSize: uploadedFile.size,
-  //         storagePath: spResult.storagePath, // SharePoint Web URL
+  //         storagePath: spResult.storagePath,
   //       },
   //       selectedTypeKey,
   //       { ...formData, documentNo: generatedDocNo },
   //     );
 
-  //     // Step 4: Call backend GRC API to save metadata record
+  //     // Step 4: Save metadata to backend DB
   //     const createDocResponse = await fetch(`${backendUrlGrc}/api/documents`, {
   //       method: "POST",
   //       headers: {
@@ -1821,7 +2053,7 @@ export function UploadDocumentView({
   //       onSubmitSuccess(responseData);
   //     }
   //   } catch (error) {
-  //     console.error("Upload/API POST Error:", error);
+  //     console.error("Upload Error:", error);
   //     alert(`Error submitting document: ${error.message}`);
   //   } finally {
   //     setIsUploading(false);

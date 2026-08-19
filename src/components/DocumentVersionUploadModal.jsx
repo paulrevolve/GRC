@@ -22,7 +22,7 @@ const formatFileSize = (bytes) => {
 export function DocumentVersionUploadModal({
   existingDocument = {
     id: "DOC-2026-0091",
-    title: "Master Services Agreement - FinAxis.pdf",
+    title: "Master Services Agreement.pdf",
     currentVersion: "v1.2",
     documentType: "Contract / Agreement",
   },

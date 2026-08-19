@@ -556,7 +556,7 @@ import {
 import axios from "axios";
 import { backendUrlGrc } from "./config";
 import { PdfViewer } from "./PdfViewer";
-import samplePdf from "../assets/DeltekCostpoint82ExtensibilityDesignerCodingGuide.pdf";
+import samplePdf from "../assets/Tax_Inv_202600000119_105.pdf";
 import { DocumentDetailView } from "./DocumentsView";
 import { UploadDocumentView } from "./UploadDocumentView";
 

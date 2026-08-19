@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   FileText,
@@ -26,7 +26,10 @@ import {
   User,
   Check,
   AlertCircle,
+  Loader2,
 } from "lucide-react";
+import { backendUrlGrc } from "./config";
+import axios from "axios";
 
 export default function DocGovApp() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -177,146 +180,312 @@ function NavAccordion({ icon, label }) {
 }
 
 // ---------------- View Components ----------------
+export function DashboardView({
+  onSelectDoc,
+  userId = 2,
+  organizationId = 1,
+  departmentId = 1,
+}) {
+  const [metrics, setMetrics] = useState(null);
+  const [pendingTasks, setPendingTasks] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-function DashboardView({ onSelectDoc }) {
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const dashboardUrl = `${backendUrlGrc}/api/document-governance/dashboard?organizationId=${organizationId}&departmentId=${departmentId}`;
+        const tasksUrl = `${backendUrlGrc}/api/document-governance/dashboard/GetPendingTastsAsync?UserId=${userId}`;
+
+        const [dashboardRes, tasksRes] = await Promise.all([
+          axios.get(dashboardUrl).catch(() => ({ data: null })),
+          axios.get(tasksUrl).catch(() => ({ data: [] })),
+        ]);
+
+        if (dashboardRes.data) {
+          setMetrics(dashboardRes.data);
+        }
+
+        if (tasksRes.data) {
+          const tasks = Array.isArray(tasksRes.data) ? tasksRes.data : [];
+          setPendingTasks(tasks);
+        }
+      } catch (err) {
+        console.error("Error fetching dashboard data:", err);
+        setError("Failed to load dashboard metrics.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, [userId, organizationId, departmentId]);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+        <span className="ml-2 text-slate-600 font-medium">
+          Loading Dashboard...
+        </span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+        {error}
+      </div>
+    );
+  }
+
+  // Safe KPI extractors
+  const totalDocs = metrics?.totalDocuments || 0;
+  const draftDocs = metrics?.draftDocuments || 0;
+  const inReviewDocs = metrics?.inReviewDocuments || 0;
+  const pendingApprovalDocs = metrics?.pendingApprovalDocuments || 0;
+  const publishedDocs = metrics?.publishedDocuments || 0;
+  const legalHoldDocs = metrics?.legalHoldDocuments || 0;
+  const archivedDocs = metrics?.archivedDocuments || 0;
+  const expiringDocs = metrics?.expiring30Days || 0;
+
+  // Percentage calculation helper
+  const calcPct = (count) =>
+    totalDocs > 0 ? Math.round((count / totalDocs) * 100) : 0;
+
+  // Dynamic Workflow Aging (based on assignedAt date from API)
+  const calculateAging = () => {
+    const buckets = { "0-2": 0, "3-7": 0, "8-15": 0, "16-30": 0, ">30": 0 };
+    const now = new Date();
+
+    pendingTasks.forEach((task) => {
+      const assignedDate = new Date(task.assignedAt);
+      const diffDays = Math.floor((now - assignedDate) / (1000 * 60 * 60 * 24));
+
+      if (diffDays <= 2) buckets["0-2"]++;
+      else if (diffDays <= 7) buckets["3-7"]++;
+      else if (diffDays <= 15) buckets["8-15"]++;
+      else if (diffDays <= 30) buckets["16-30"]++;
+      else buckets[">30"]++;
+    });
+
+    const maxCount = Math.max(...Object.values(buckets), 1);
+    return { buckets, maxCount };
+  };
+
+  const { buckets, maxCount } = calculateAging();
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <KpiCard
           title="Total Documents"
-          count="4,892"
+          count={totalDocs.toLocaleString()}
           color="bg-blue-500"
           icon={<FileText size={18} />}
         />
         <KpiCard
           title="Published Documents"
-          count="2,350"
+          count={publishedDocs.toLocaleString()}
           color="bg-emerald-500"
           icon={<FileText size={18} />}
         />
         <KpiCard
-          title="Pending My Approval"
-          count="12"
+          title="Pending Approval"
+          count={pendingApprovalDocs.toLocaleString()}
           color="bg-amber-500"
           icon={<Clock size={18} />}
         />
         <KpiCard
-          title="Pending My Review"
-          count="18"
+          title="In Review"
+          count={inReviewDocs.toLocaleString()}
           color="bg-purple-500"
           icon={<Eye size={18} />}
         />
         <KpiCard
           title="Expiring Soon"
-          count="37"
+          count={expiringDocs.toLocaleString()}
           color="bg-red-500"
           icon={<AlertCircle size={18} />}
         />
       </div>
 
       {/* Main Charts & Widgets Grid */}
-      <div className="grid grid-cols-12 gap-6">
-        {/* Documents by Status Chart Mock */}
-        <div className="col-span-4 bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Documents by Status Chart */}
+        <div className="lg:col-span-4 bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
           <h3 className="font-semibold text-slate-800 mb-4">
             Documents by Status
           </h3>
           <div className="flex items-center gap-6">
-            <div className="relative w-36 h-36 rounded-full border-[16px] border-blue-500 border-t-emerald-500 border-r-amber-500 border-l-purple-500 flex items-center justify-center">
-              <span className="text-xs text-slate-400">Status</span>
+            <div className="relative w-32 h-32 rounded-full border-[14px] border-blue-500 border-t-emerald-500 border-r-amber-500 border-l-purple-500 flex items-center justify-center shrink-0">
+              <span className="text-xs font-semibold text-slate-500">
+                Status
+              </span>
             </div>
-            <div className="space-y-1.5 text-xs">
+            <div className="space-y-1.5 text-xs w-full">
               <StatusLegend
                 color="bg-slate-400"
                 label="Draft"
-                count="645 (13%)"
+                count={`${draftDocs} (${calcPct(draftDocs)}%)`}
               />
               <StatusLegend
                 color="bg-amber-400"
                 label="In Review"
-                count="812 (17%)"
+                count={`${inReviewDocs} (${calcPct(inReviewDocs)}%)`}
               />
               <StatusLegend
                 color="bg-purple-500"
                 label="Pending Approval"
-                count="456 (9%)"
+                count={`${pendingApprovalDocs} (${calcPct(pendingApprovalDocs)}%)`}
               />
               <StatusLegend
                 color="bg-emerald-500"
                 label="Published"
-                count="2,350 (48%)"
+                count={`${publishedDocs} (${calcPct(publishedDocs)}%)`}
               />
               <StatusLegend
-                color="bg-slate-500"
-                label="Superseded"
-                count="420 (9%)"
+                color="bg-indigo-500"
+                label="Legal Hold"
+                count={`${legalHoldDocs} (${calcPct(legalHoldDocs)}%)`}
               />
               <StatusLegend
                 color="bg-red-400"
                 label="Archived"
-                count="209 (4%)"
+                count={`${archivedDocs} (${calcPct(archivedDocs)}%)`}
               />
             </div>
           </div>
         </div>
 
-        {/* Workflow Aging */}
-        <div className="col-span-4 bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
+        {/* Workflow Aging (My Tasks) */}
+        <div className="lg:col-span-4 bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
           <h3 className="font-semibold text-slate-800 mb-4">
-            Workflow Aging (My Tasks)
+            Workflow Aging ({pendingTasks.length} Pending Tasks)
           </h3>
           <div className="space-y-3 text-xs">
             <BarRow
               label="0 - 2 Days"
-              width="80%"
+              width={`${(buckets["0-2"] / maxCount) * 100}%`}
               color="bg-emerald-500"
-              value="5"
+              value={buckets["0-2"]}
             />
             <BarRow
               label="3 - 7 Days"
-              width="60%"
+              width={`${(buckets["3-7"] / maxCount) * 100}%`}
               color="bg-amber-400"
-              value="4"
+              value={buckets["3-7"]}
             />
             <BarRow
               label="8 - 15 Days"
-              width="30%"
+              width={`${(buckets["8-15"] / maxCount) * 100}%`}
               color="bg-orange-400"
-              value="2"
+              value={buckets["8-15"]}
             />
             <BarRow
               label="16 - 30 Days"
-              width="15%"
+              width={`${(buckets["16-30"] / maxCount) * 100}%`}
               color="bg-red-500"
-              value="1"
+              value={buckets["16-30"]}
             />
-            <BarRow label="> 30 Days" width="0%" color="bg-red-600" value="0" />
+            <BarRow
+              label="> 30 Days"
+              width={`${(buckets[">30"] / maxCount) * 100}%`}
+              color="bg-red-600"
+              value={buckets[">30"]}
+            />
           </div>
         </div>
 
-        {/* Expiring Documents List */}
-        <div className="col-span-4 bg-white p-5 rounded-lg border border-slate-200 shadow-sm flex flex-col">
+        {/* Pending Approval / My Tasks List */}
+        <div className="lg:col-span-4 bg-white p-5 rounded-lg border border-slate-200 shadow-sm flex flex-col">
           <h3 className="font-semibold text-slate-800 mb-4">
-            Expiring Documents
+            Action Required (My Tasks)
           </h3>
-          <div className="space-y-3 text-xs flex-1">
-            <ExpiringRow
-              title="Information Security Policy"
-              date="15 May 2024"
-              onClick={onSelectDoc}
-            />
-            <ExpiringRow title="Vendor Management Policy" date="22 May 2024" />
-            <ExpiringRow title="Data Privacy Policy" date="28 May 2024" />
-            <ExpiringRow title="Business Continuity Plan" date="03 Jun 2024" />
-            <ExpiringRow title="Travel Policy" date="10 Jun 2024" />
+          <div className="space-y-3 text-xs flex-1 overflow-y-auto max-h-[220px]">
+            {pendingTasks.length === 0 ? (
+              <p className="text-slate-400 text-center py-6">
+                No pending tasks found.
+              </p>
+            ) : (
+              pendingTasks.map((task) => (
+                <TaskRow
+                  key={task.taskId}
+                  task={task}
+                  onClick={() => onSelectDoc && onSelectDoc(task)}
+                />
+              ))
+            )}
           </div>
-          <button className="text-xs text-blue-600 hover:underline text-center w-full mt-2 font-medium">
-            View all
-          </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Sub-components
+function KpiCard({ title, count, color, icon }) {
+  return (
+    <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between">
+      <div>
+        <p className="text-xs font-medium text-slate-500">{title}</p>
+        <p className="text-xl font-bold text-slate-800 mt-1">{count}</p>
+      </div>
+      <div className={`p-2.5 rounded-lg text-white ${color}`}>{icon}</div>
+    </div>
+  );
+}
+
+function StatusLegend({ color, label, count }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-1.5">
+        <span className={`w-2.5 h-2.5 rounded-full ${color}`} />
+        <span className="text-slate-600 truncate max-w-[100px]">{label}</span>
+      </div>
+      <span className="font-medium text-slate-800">{count}</span>
+    </div>
+  );
+}
+
+function BarRow({ label, width, color, value }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-20 text-slate-500 shrink-0">{label}</span>
+      <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
+        <div
+          className={`h-full ${color} transition-all duration-300`}
+          style={{ width: value > 0 ? width : "0%" }}
+        />
+      </div>
+      <span className="w-4 text-right font-medium text-slate-700">{value}</span>
+    </div>
+  );
+}
+
+function TaskRow({ task, onClick }) {
+  return (
+    <div
+      onClick={onClick}
+      className="p-2.5 border border-slate-100 bg-slate-50 hover:bg-blue-50/50 hover:border-blue-200 rounded cursor-pointer transition-colors"
+    >
+      <div className="flex justify-between items-start font-medium text-slate-800">
+        <span className="truncate max-w-[180px]">{task.title}</span>
+        <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded uppercase font-bold">
+          {task.priority}
+        </span>
+      </div>
+      <div className="flex justify-between items-center text-[11px] text-slate-500 mt-1">
+        <span>
+          {task.documentNo} v{task.versionNo}
+        </span>
+        <span>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
       </div>
     </div>
   );
@@ -803,44 +972,44 @@ function RetentionView() {
 
 // ---------------- Helper Components ----------------
 
-function KpiCard({ title, count, color, icon }) {
-  return (
-    <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between">
-      <div>
-        <p className="text-xs text-slate-500 font-medium">{title}</p>
-        <p className="text-xl font-bold text-slate-800 mt-1">{count}</p>
-        <span className="text-[10px] text-blue-600 font-medium hover:underline cursor-pointer">
-          View all
-        </span>
-      </div>
-      <div className={`p-2.5 rounded-lg text-white ${color}`}>{icon}</div>
-    </div>
-  );
-}
+// function KpiCard({ title, count, color, icon }) {
+//   return (
+//     <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between">
+//       <div>
+//         <p className="text-xs text-slate-500 font-medium">{title}</p>
+//         <p className="text-xl font-bold text-slate-800 mt-1">{count}</p>
+//         <span className="text-[10px] text-blue-600 font-medium hover:underline cursor-pointer">
+//           View all
+//         </span>
+//       </div>
+//       <div className={`p-2.5 rounded-lg text-white ${color}`}>{icon}</div>
+//     </div>
+//   );
+// }
 
-function StatusLegend({ color, label, count }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className={`w-2.5 h-2.5 rounded-full ${color}`} />
-      <span className="text-slate-600">{label}:</span>
-      <span className="font-semibold text-slate-800">{count}</span>
-    </div>
-  );
-}
+// function StatusLegend({ color, label, count }) {
+//   return (
+//     <div className="flex items-center gap-2">
+//       <span className={`w-2.5 h-2.5 rounded-full ${color}`} />
+//       <span className="text-slate-600">{label}:</span>
+//       <span className="font-semibold text-slate-800">{count}</span>
+//     </div>
+//   );
+// }
 
-function BarRow({ label, width, color, value }) {
-  return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-slate-600">
-        <span>{label}</span>
-        <span className="font-semibold">{value}</span>
-      </div>
-      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-        <div className={`h-full ${color}`} style={{ width }} />
-      </div>
-    </div>
-  );
-}
+// function BarRow({ label, width, color, value }) {
+//   return (
+//     <div className="space-y-1">
+//       <div className="flex justify-between text-slate-600">
+//         <span>{label}</span>
+//         <span className="font-semibold">{value}</span>
+//       </div>
+//       <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+//         <div className={`h-full ${color}`} style={{ width }} />
+//       </div>
+//     </div>
+//   );
+// }
 
 function ExpiringRow({ title, date, onClick }) {
   return (
@@ -915,41 +1084,41 @@ function WorkflowStep({ label, name, date, completed, active, pending }) {
   );
 }
 
-function TaskRow({
-  title,
-  doc,
-  workflow,
-  due,
-  priority,
-  priorityColor,
-  action,
-}) {
-  return (
-    <tr className="hover:bg-slate-50">
-      <td className="p-3 font-medium text-slate-800">{title}</td>
-      <td className="p-3 text-slate-600">{doc}</td>
-      <td className="p-3 text-slate-500">{workflow}</td>
-      <td className="p-3 text-slate-500">{due}</td>
-      <td className="p-3">
-        <span
-          className={`px-2 py-0.5 rounded text-[10px] font-semibold ${priorityColor}`}
-        >
-          {priority}
-        </span>
-      </td>
-      <td className="p-3">
-        <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-semibold">
-          Pending
-        </span>
-      </td>
-      <td className="p-3 text-right">
-        <button className="border border-blue-600 text-blue-600 hover:bg-blue-50 px-2.5 py-1 rounded text-[11px] font-medium">
-          {action}
-        </button>
-      </td>
-    </tr>
-  );
-}
+// function TaskRow({
+//   title,
+//   doc,
+//   workflow,
+//   due,
+//   priority,
+//   priorityColor,
+//   action,
+// }) {
+//   return (
+//     <tr className="hover:bg-slate-50">
+//       <td className="p-3 font-medium text-slate-800">{title}</td>
+//       <td className="p-3 text-slate-600">{doc}</td>
+//       <td className="p-3 text-slate-500">{workflow}</td>
+//       <td className="p-3 text-slate-500">{due}</td>
+//       <td className="p-3">
+//         <span
+//           className={`px-2 py-0.5 rounded text-[10px] font-semibold ${priorityColor}`}
+//         >
+//           {priority}
+//         </span>
+//       </td>
+//       <td className="p-3">
+//         <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-semibold">
+//           Pending
+//         </span>
+//       </td>
+//       <td className="p-3 text-right">
+//         <button className="border border-blue-600 text-blue-600 hover:bg-blue-50 px-2.5 py-1 rounded text-[11px] font-medium">
+//           {action}
+//         </button>
+//       </td>
+//     </tr>
+//   );
+// }
 
 function RetentionRow({ doc, category, period, until, status, statusColor }) {
   return (

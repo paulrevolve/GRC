@@ -150,14 +150,11 @@ function App() {
                 <div className="flex items-center justify-center min-h-[80vh]">
                   <div className="max-w-md w-full text-center">
                     <span className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-blue-900 text-transparent bg-clip-text">
-                      FinAxis
+                      GRC
                     </span>
                     <h1 className="text-2xl font-semibold text-gray-900 mt-4">
-                      Welcome to Lease Budgeting
+                      Document Management & Governance System
                     </h1>
-                    <p className="text-gray-600 mt-2">
-                      Select an option from the sidebar to get started.
-                    </p>
                   </div>
                 </div>
               }

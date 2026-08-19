@@ -5,8 +5,9 @@ export const backendUrlUpload = import.meta.env.VITE_BACKEND_URL_UPLOAD;
 export const backendUrlGrc = import.meta.env.VITE_BACKEND_URL_GRC;
 export const loginBackendUrl = import.meta.env.VITE_LOGIN_BACKEND_URL;
 
-const AzureClientId = import.meta.env.VITE_AZURE_CLIENT_ID;
-const AzureTenantId = import.meta.env.VITE_AZURE_TENANT_ID;
+export const AzureClientId = import.meta.env.VITE_AZURE_CLIENT_ID;
+export const AzureTenantId = import.meta.env.VITE_AZURE_TENANT_ID;
+export const AzureSecret = import.meta.env.VITE_AZURE_CLIENT_SECRET;
 
 export const msalConfig = {
   auth: {
