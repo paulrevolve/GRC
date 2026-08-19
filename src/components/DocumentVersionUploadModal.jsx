@@ -9,6 +9,7 @@ import {
   GitCommit,
   Tag,
 } from "lucide-react";
+import { backendUrlGrc } from "./config";
 
 // Utility function for readable file sizes
 const formatFileSize = (bytes) => {
@@ -20,15 +21,22 @@ const formatFileSize = (bytes) => {
 };
 
 export function DocumentVersionUploadModal({
-  existingDocument = {
-    id: "DOC-2026-0091",
-    title: "Master Services Agreement.pdf",
-    currentVersion: "v1.2",
-    documentType: "Contract / Agreement",
-  },
+  existingDocument,
   onClose,
   onUploadSuccess,
 }) {
+  // Normalize and extract details safely from props
+  const docId = existingDocument?.documentId || existingDocument?.id || "";
+  const docTitle =
+    existingDocument?.title || existingDocument?.docName || "Untitled Document";
+  const rawVersion =
+    existingDocument?.currentVersion || existingDocument?.version || "1.0";
+  const docVersion = rawVersion.startsWith("v") ? rawVersion : `v${rawVersion}`;
+  const docType =
+    existingDocument?.documentType ||
+    existingDocument?.type ||
+    "General Document";
+
   const [file, setFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [versionType, setVersionType] = useState("minor"); // 'minor' | 'major'
@@ -39,8 +47,8 @@ export function DocumentVersionUploadModal({
 
   // Compute next version string based on selection
   const getNextVersion = () => {
-    const rawVersion = existingDocument.currentVersion.replace("v", "");
-    const [major, minor] = rawVersion.split(".").map(Number);
+    const cleanVersion = docVersion.replace("v", "");
+    const [major, minor] = cleanVersion.split(".").map(Number);
 
     if (versionType === "major") {
       return `v${(major || 1) + 1}.0`;
@@ -72,8 +80,9 @@ export function DocumentVersionUploadModal({
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (!file) {
       alert("Please select or drop an updated file.");
       return;
@@ -85,23 +94,48 @@ export function DocumentVersionUploadModal({
 
     setIsSubmitting(true);
 
-    // Payload ready for backend API consumption
-    const uploadPayload = {
-      documentId: existingDocument.id,
-      newVersion: getNextVersion(),
-      versionType,
-      file,
-      changeComment: changeComment.trim(),
-      updatedAt: new Date().toISOString(),
-    };
+    try {
+      const isMajor = versionType === "major";
+      const comments = changeComment.trim();
 
-    console.log("Submitting New Document Version Payload:", uploadPayload);
+      // 1. Build FormData matching exact C# backend Swagger DTO casing
+      const formData = new FormData();
+      formData.append("File", file); // Capital 'F'
+      formData.append("IsMajor", isMajor); // Capital 'I' and 'M'
+      formData.append("ChangesSummary", comments); // Matches 'ChangesSummary' field in API
 
-    // Simulate API delay
-    setTimeout(() => {
+      // 2. Ensure base URL trailing slash format is safe
+      const baseUrl = backendUrlGrc.endsWith("/")
+        ? backendUrlGrc
+        : `${backendUrlGrc}/`;
+
+      const response = await fetch(
+        `${baseUrl}api/documents/${docId}/upload/new_version`,
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Upload failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (onUploadSuccess) {
+        onUploadSuccess({
+          ...data,
+          newVersion: getNextVersion(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      console.error("Failed to upload document version:", error);
+      alert("An error occurred while uploading. Please try again.");
+    } finally {
       setIsSubmitting(false);
-      if (onUploadSuccess) onUploadSuccess(uploadPayload);
-    }, 1000);
+    }
   };
 
   return (

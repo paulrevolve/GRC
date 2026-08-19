@@ -310,14 +310,14 @@ const NavigationSidebar = ({
                     />
                     {/* )} */}
                     {/* {canViewEditBudget && ( */}
-                    <NavItem
+                    {/* <NavItem
                       label="My Tasks"
                       path="/dashboard/tasks-view"
                       selected={selectedPage}
                       onClick={handleLinkClick}
                       searchTerm={searchTerm}
                       isExpanded={isExpanded}
-                    />
+                    /> */}
                     {/* )} */}
                   </div>
                 )}

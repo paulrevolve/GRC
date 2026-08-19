@@ -97,66 +97,6 @@ const STATUS_COLOR_MAP = {
   Approved: "bg-emerald-100 text-emerald-800 border border-emerald-200",
 };
 
-/**
- * Maps incoming API objects to the structure expected by UI components.
- */
-// function mapApiDocumentToUI(doc) {
-//   // Extract latest version if available
-//   const latestVersion =
-//     doc.versions && doc.versions.length > 0
-//       ? doc.versions[doc.versions.length - 1]
-//       : null;
-
-//   // Formatting dates cleanly (YYYY-MM-DD to DD MMM YYYY or local string)
-//   const formatDate = (dateStr) => {
-//     if (!dateStr) return "N/A";
-//     const date = new Date(dateStr);
-//     return isNaN(date.getTime())
-//       ? dateStr
-//       : date.toLocaleDateString("en-GB", {
-//           day: "2-digit",
-//           month: "short",
-//           year: "numeric",
-//         });
-//   };
-
-//   const statusFormatted = doc.status
-//     ? doc.status.charAt(0).toUpperCase() + doc.status.slice(1).toLowerCase()
-//     : "Draft";
-
-//   return {
-//     id: String(doc.documentId),
-//     title: doc.title || "Untitled Document",
-//     number: doc.documentNo || `DOC-${doc.documentId}`,
-//     type: DOCUMENT_TYPES_MAP[doc.documentTypeId] || "Policy",
-//     status: statusFormatted,
-//     fileUrl: latestVersion?.fileUrl || samplePdf,
-//     totalPages: latestVersion?.totalPages || 1,
-//     statusColor:
-//       STATUS_COLOR_MAP[doc.status] ||
-//       STATUS_COLOR_MAP[statusFormatted] ||
-//       "bg-slate-100 text-slate-700",
-//     version: latestVersion?.versionNumber || "1.0",
-//     owner: doc.ownerName || `User #${doc.ownerUserId || doc.createdBy || "1"}`,
-//     date: formatDate(doc.createdAt),
-//     category: CATEGORY_MAP[doc.categoryId] || "General",
-//     department: DEPARTMENT_MAP[doc.departmentId] || "IT",
-//     effectiveDate: formatDate(doc.effectiveDate),
-//     reviewDate: formatDate(doc.nextReviewDate),
-//     classification: CLASSIFICATION_MAP[doc.classificationId] || "Internal",
-//     retention: doc.retentionPolicyId
-//       ? `${doc.retentionPolicyId} Years`
-//       : "Standard",
-//     workflow: "Standard Review Workflow",
-//     createdOn: formatDate(doc.createdAt),
-//     description:
-//       doc.description ||
-//       `Document reference ${doc.documentNo} under ${CATEGORY_MAP[doc.categoryId] || "General"}.`,
-//   };
-// }
-
-// Metadata configuration for Upload Wizard
-
 function mapApiDocumentToUI(doc) {
   if (!doc) return {};
 
@@ -434,6 +374,7 @@ function InfoRow({ label, value }) {
 // ==========================================
 
 // ===== UPDATED WorkflowStep to support APPROVED, REJECTED, and PENDING statuses dynamically =====
+
 function WorkflowStep({ label, name, date, status, comments }) {
   const isCompleted = status === "APPROVED";
   const isRejected = status === "REJECTED";
@@ -1192,6 +1133,7 @@ export function DocumentDetailView({
                   docTitle={doc.title}
                   docNumber={doc.number}
                   totalPages={doc.totalPages}
+                  status={doc.status}
                 />
               </div>
 
@@ -1748,10 +1690,17 @@ export default function DocumentManagementModule() {
       {isVersionModalOpen && selectedDoc && (
         <DocumentVersionUploadModal
           existingDocument={{
-            id: selectedDoc.id,
-            title: selectedDoc.title,
-            currentVersion: selectedDoc.version || "1.0",
-            documentType: selectedDoc.type,
+            // Normalize dynamic ID
+            id: selectedDoc.documentId || selectedDoc.id,
+            // Normalize dynamic Title
+            title:
+              selectedDoc.title || selectedDoc.docName || "Untitled Document",
+            // Normalize dynamic Version format
+            currentVersion: selectedDoc.version?.startsWith("v")
+              ? selectedDoc.version
+              : `v${selectedDoc.version || "1.0"}`,
+            // Normalize dynamic Type
+            documentType: selectedDoc.type || selectedDoc.category || "General",
           }}
           onClose={() => setIsVersionModalOpen(false)}
           onUploadSuccess={handleVersionUploadSuccess}

@@ -149,7 +149,26 @@ import {
   Maximize2,
 } from "lucide-react";
 
-export function PdfViewer({ pdfUrl, docTitle, docNumber, totalPages = 1 }) {
+const WATERMARK_CONFIG = {
+  APPROVED: {
+    label: "APPROVED",
+    color: "text-emerald-500/20 border-emerald-500/20",
+  },
+  PENDING: {
+    label: "PENDING APPROVAL",
+    color: "text-amber-500/20 border-amber-500/20",
+  },
+  REJECTED: { label: "REJECTED", color: "text-red-500/20 border-red-500/20" },
+  DRAFT: { label: "DRAFT", color: "text-slate-400/20 border-slate-400/20" },
+};
+
+export function PdfViewer({
+  pdfUrl,
+  docTitle,
+  docNumber,
+  totalPages = 1,
+  status,
+}) {
   const [currentPage, setCurrentPage] = useState(1);
   const [zoom, setZoom] = useState(100);
 
@@ -163,6 +182,12 @@ export function PdfViewer({ pdfUrl, docTitle, docNumber, totalPages = 1 }) {
     if (pdfUrl) {
       window.open(pdfUrl, "_blank", "noopener,noreferrer");
     }
+  };
+
+  const normalizedStatus = status?.toUpperCase() || "DRAFT";
+  const watermark = WATERMARK_CONFIG[normalizedStatus] || {
+    label: normalizedStatus,
+    color: "text-slate-400/20 border-slate-400/20",
   };
 
   return (
@@ -235,7 +260,17 @@ export function PdfViewer({ pdfUrl, docTitle, docNumber, totalPages = 1 }) {
       </div>
 
       {/* 2. Document Canvas Display (Overflow hidden prevents double scrollbars) */}
+      {/* 2. Document Canvas Display with Watermark Layer */}
       <div className="flex-1 bg-slate-950 p-2 overflow-hidden flex items-center justify-center relative">
+        {/* Dynamic Watermark Overlay */}
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center select-none overflow-hidden">
+          <div
+            className={`transform -rotate-30 text-3xl sm:text-4xl font-black tracking-widest border-4 px-6 py-2 rounded-xl uppercase shadow-2xl backdrop-blur-[1px] whitespace-nowrap ${watermark.style}`}
+          >
+            {watermark.label}
+          </div>
+        </div>
+
         {pdfUrl ? (
           <div
             className="w-full h-full transition-transform duration-200 origin-top flex items-center justify-center"
