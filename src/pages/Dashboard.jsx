@@ -45,7 +45,7 @@ const Dashboard = () => {
       let permPromise = Promise.resolve(null);
       if (user?.userId) {
         permPromise = axios.get(
-          `${backendUrl}/api/SecurityAccess/GetUserPermissionsV1/${user.userId}`,
+          // `${backendUrl}/api/SecurityAccess/GetUserPermissionsV1/${user.userId}`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -164,16 +164,16 @@ const Dashboard = () => {
   }
 
   // Loading State
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-screen font-inter bg-[#E6F2F5]">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-        <span className="ml-2 text-gray-600 text-sm sm:text-base">
-          Loading Config...
-        </span>
-      </div>
-    );
-  }
+  // if (loading) {
+  //   return (
+  //     <div className="flex justify-center items-center h-screen font-inter bg-[#E6F2F5]">
+  //       <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+  //       <span className="ml-2 text-gray-600 text-sm sm:text-base">
+  //         Loading Config...
+  //       </span>
+  //     </div>
+  //   );
+  // }
 
   const sidebarWidth = isHovered ? "w-[190px]" : "w-[56px]";
 

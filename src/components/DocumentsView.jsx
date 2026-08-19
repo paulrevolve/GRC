@@ -41,7 +41,7 @@ import {
 } from "lucide-react";
 import { UploadDocumentView } from "./UploadDocumentView";
 import { DocumentVersionUploadModal } from "./DocumentVersionUploadModal";
-import { PdfViewer } from "./PdfViewer";
+import { DynamicPdfViewer, PdfViewer } from "./PdfViewer";
 
 import samplePdf from "../assets/Tax_Inv_202600000119_105.pdf";
 import { TasksView } from "./TasksView";
@@ -136,6 +136,10 @@ function mapApiDocumentToUI(doc) {
       STATUS_COLOR_MAP[statusFormatted] ||
       "bg-slate-100 text-slate-700",
     version: latestVersion?.versionNumber || doc.version || "1.0",
+    currentVersionId:
+      latestVersion?.versionId || doc.currentVersionId || doc.versionId || null,
+    versionId:
+      latestVersion?.versionId || doc.versionId || doc.currentVersionId || null,
     owner:
       doc.ownerName ||
       doc.owner ||
@@ -710,119 +714,122 @@ export function DocumentsView({
       </div>
 
       {/* Table Section */}
-      <div className="overflow-x-auto">
-        {isLoading ? (
-          <div className="p-8 text-center text-slate-500 text-xs">
-            Loading documents from server...
-          </div>
-        ) : error ? (
-          <div className="p-8 text-center text-red-500 text-xs">{error}</div>
-        ) : (
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-slate-200 text-slate-500 bg-slate-50">
-                <th className="p-3">Document Title</th>
-                <th className="p-3">Document Number</th>
-                <th className="p-3">Type</th>
-                <th className="p-3">Status</th>
-                <th className="p-3">Version</th>
-                <th className="p-3">Owner</th>
-                <th className="p-3">Created / Modified</th>
-                <th className="p-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredDocs.length > 0 ? (
-                filteredDocs.map((doc) => (
-                  <tr
-                    key={doc.id}
-                    className="hover:bg-slate-50/80 transition-colors"
-                  >
-                    <td className="p-3 font-semibold text-slate-800">
-                      <button
-                        onClick={() => onSelectDoc(doc)}
-                        className="flex items-center gap-1.5 text-blue-600 hover:underline text-left cursor-pointer"
-                      >
-                        <FileText size={14} className="text-slate-400" />
-                        {doc.title || doc.docName}
-                      </button>
-                    </td>
-                    <td className="p-3 text-slate-600">
-                      {doc.number || doc.docNo}
-                    </td>
-                    <td className="p-3 text-slate-600">{doc.type}</td>
-                    <td className="p-3">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                          doc.status?.toLowerCase() === "draft"
-                            ? "bg-blue-50 text-blue-700 border-blue-200"
-                            : doc.status?.toLowerCase() === "completed" ||
-                                doc.status?.toLowerCase() === "published"
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : doc.status?.toLowerCase() === "rejected"
-                                ? "bg-red-50 text-red-700 border-red-200"
-                                : "bg-slate-100 text-slate-600 border-slate-200"
-                        }`}
-                      >
-                        {doc.status}
-                      </span>
-                    </td>
-                    <td className="p-3 text-slate-600">
-                      {doc.version || "1.0"}
-                    </td>
-                    <td className="p-3 text-slate-600">{doc.owner}</td>
-                    <td className="p-3 text-slate-600">
-                      {doc.createdOn || doc.modifiedOn || "N/A"}
-                    </td>
-
-                    <td className="p-3 text-right">
-                      {activeTab === "Review" && (
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleOpenAction(doc, "review")}
-                            className="px-2.5 py-1 text-slate-700 border border-slate-200 bg-white hover:bg-slate-100 rounded flex items-center gap-1 cursor-pointer font-medium"
-                          >
-                            <Eye size={12} /> Review
-                          </button>
-                        </div>
-                      )}
-
-                      {activeTab === "Approval" && (
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleOpenAction(doc, "review")}
-                            className="px-2 py-1 text-slate-700 border border-slate-200 bg-white hover:bg-slate-100 rounded flex items-center gap-1 cursor-pointer"
-                          >
-                            <Eye size={12} /> Review
-                          </button>
-                          <button
-                            onClick={() => handleOpenAction(doc, "approve")}
-                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded flex items-center gap-1 cursor-pointer font-medium"
-                          >
-                            <CheckCircle2 size={12} /> Approve
-                          </button>
-                        </div>
-                      )}
-
-                      {(activeTab === "Rejected" ||
-                        activeTab === "Completed") && (
-                        <span className="text-slate-400 italic">
-                          No actions available
+      <div className="flex flex-col h-[calc(100vh-220px)] w-full border border-slate-200 rounded-lg bg-white overflow-hidden shadow-sm">
+        <div className="overflow-auto flex-1">
+          {isLoading ? (
+            <div className="p-8 text-center text-slate-500 text-xs">
+              Loading documents from server...
+            </div>
+          ) : error ? (
+            <div className="p-8 text-center text-red-500 text-xs">{error}</div>
+          ) : (
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="sticky top-0 z-20 bg-slate-50 shadow-sm">
+                <tr className="border-b border-slate-200 text-slate-500 bg-slate-50">
+                  <th className="p-3">Document Title</th>
+                  <th className="p-3">Document Number</th>
+                  <th className="p-3">Type</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3">Version</th>
+                  <th className="p-3">Owner</th>
+                  <th className="p-3">Created / Modified</th>
+                  <th className="p-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredDocs.length > 0 ? (
+                  filteredDocs.map((doc) => (
+                    <tr
+                      key={doc.id}
+                      className="hover:bg-slate-50/80 transition-colors"
+                    >
+                      <td className="p-3 font-semibold text-slate-800">
+                        <button
+                          onClick={() => onSelectDoc(doc)}
+                          className="flex items-center gap-1.5 text-blue-600 hover:underline text-left cursor-pointer"
+                        >
+                          <FileText size={14} className="text-slate-400" />
+                          {doc.title || doc.docName}
+                        </button>
+                      </td>
+                      <td className="p-3 text-slate-600">
+                        {doc.number || doc.docNo}
+                      </td>
+                      <td className="p-3 text-slate-600">{doc.type}</td>
+                      <td className="p-3">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                            doc.status?.toLowerCase() === "draft"
+                              ? "bg-blue-50 text-blue-700 border-blue-200"
+                              : doc.status?.toLowerCase() === "completed" ||
+                                  doc.status?.toLowerCase() === "published"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : doc.status?.toLowerCase() === "rejected"
+                                  ? "bg-red-50 text-red-700 border-red-200"
+                                  : "bg-slate-100 text-slate-600 border-slate-200"
+                          }`}
+                        >
+                          {doc.status}
                         </span>
-                      )}
+                      </td>
+                      <td className="p-3 text-slate-600">
+                        {doc.version || "1.0"}
+                      </td>
+                      <td className="p-3 text-slate-600">{doc.owner}</td>
+                      <td className="p-3 text-slate-600">
+                        {doc.createdOn || doc.modifiedOn || "N/A"}
+                      </td>
+
+                      <td className="p-3 text-right">
+                        {activeTab === "Review" &&
+                          doc.status?.toLowerCase() === "draft" && (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleOpenAction(doc, "review")}
+                                className="px-2.5 py-1 text-slate-700 border border-slate-200 bg-white hover:bg-slate-100 rounded flex items-center gap-1 cursor-pointer font-medium"
+                              >
+                                <Eye size={12} /> Review
+                              </button>
+                            </div>
+                          )}
+
+                        {activeTab === "Approval" && (
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* <button
+                              onClick={() => handleOpenAction(doc, "review")}
+                              className="px-2 py-1 text-slate-700 border border-slate-200 bg-white hover:bg-slate-100 rounded flex items-center gap-1 cursor-pointer"
+                            >
+                              <Eye size={12} /> Review
+                            </button> */}
+                            <button
+                              onClick={() => handleOpenAction(doc, "approve")}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded flex items-center gap-1 cursor-pointer font-medium"
+                            >
+                              <CheckCircle2 size={12} /> Approve
+                            </button>
+                          </div>
+                        )}
+
+                        {(activeTab === "Rejected" ||
+                          activeTab === "Completed") && (
+                          <span className="text-slate-400 italic">
+                            No actions available
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="p-6 text-center text-slate-400">
+                      No matching documents found.
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={8} className="p-6 text-center text-slate-400">
-                    No matching documents found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        )}
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
       {/* Task Review / Approval Modal */}
@@ -926,6 +933,14 @@ export function DocumentDetailView({
   const [isWorkflowLoading, setIsWorkflowLoading] = useState(true);
   const [workflowError, setWorkflowError] = useState(null);
 
+  // Version history states
+  const [versions, setVersions] = useState([]);
+  const [isVersionsLoading, setIsVersionsLoading] = useState(false);
+  const [versionsError, setVersionsError] = useState(null);
+  const [downloadingVersionId, setDownloadingVersionId] = useState(null);
+
+  const documentId = doc?.documentId || doc?.id;
+
   const formatApiDate = (dateStr) => {
     if (!dateStr) return "N/A";
     const date = new Date(dateStr);
@@ -938,10 +953,9 @@ export function DocumentDetailView({
         });
   };
 
-  // ===== ADDED: useEffect hook to fetch live approval request & pending tasks =====
+  // 1. Fetch Workflow Status
   useEffect(() => {
     const fetchWorkflowStatus = async () => {
-      // Extract dynamic request ID safely from doc object
       const requestId =
         doc?.requestId ||
         doc?.request?.requestId ||
@@ -949,7 +963,6 @@ export function DocumentDetailView({
         doc?.originalData?.requestLevel?.requestId;
 
       if (!requestId) {
-        console.warn("No request associated with this document.");
         setIsWorkflowLoading(false);
         return;
       }
@@ -957,7 +970,6 @@ export function DocumentDetailView({
       setIsWorkflowLoading(true);
       setWorkflowError(null);
       try {
-        // Fetch both live endpoints simultaneously
         const [requestRes, tasksRes] = await Promise.all([
           fetch(`${backendUrlGrc}/api/approval/requests/${requestId}`),
           fetch(`${backendUrlGrc}/api/approval/tasks/pending/${userId}`),
@@ -982,15 +994,82 @@ export function DocumentDetailView({
 
     fetchWorkflowStatus();
   }, [
-    doc?.id,
-    doc?.documentId,
+    documentId,
     doc?.requestId,
     doc?.request?.requestId,
-    doc?.originalData?.requestApproverId,
+    doc?.originalData?.requestLevel?.request?.requestId,
+    doc?.originalData?.requestLevel?.requestId,
     userId,
   ]);
 
+  // 2. Fetch Document Version History
+  useEffect(() => {
+    if (!documentId) return;
+
+    const fetchVersionHistory = async () => {
+      setIsVersionsLoading(true);
+      setVersionsError(null);
+      try {
+        const res = await fetch(
+          `${backendUrlGrc}/api/documents/${documentId}/versions`,
+        );
+        if (!res.ok) throw new Error("Failed to load version history.");
+
+        const data = await res.json();
+        setVersions(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Error fetching document versions:", err);
+        setVersionsError("Unable to load revision history.");
+      } finally {
+        setIsVersionsLoading(false);
+      }
+    };
+
+    fetchVersionHistory();
+  }, [documentId]);
+
+  // 3. Handle Binary File Download (Version ID & Document ID)
+  const handleDownloadVersion = async (versionId, fileName) => {
+    try {
+      setDownloadingVersionId(versionId);
+      const downloadUrl = `${backendUrlGrc}/api/documents/${documentId}/versions/${versionId}/download`;
+
+      const response = await fetch(downloadUrl);
+      if (!response.ok) throw new Error("Download request failed.");
+
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = fileName || `document_v${versionId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Download error:", err);
+      alert("Failed to download requested version.");
+    } finally {
+      setDownloadingVersionId(null);
+    }
+  };
+
   if (!doc) return null;
+
+  // Real data mappings with fallbacks
+  const mappedCategory =
+    CATEGORY_MAP[doc.categoryId] || doc.category || "General";
+  const mappedDepartment =
+    DEPARTMENT_MAP[doc.departmentId] || doc.department || "IT";
+  const mappedClassification =
+    CLASSIFICATION_MAP[doc.classificationId] ||
+    doc.classification ||
+    "Internal";
+  const mappedRetention = doc.retentionPolicyId
+    ? `${doc.retentionPolicyId} Years`
+    : doc.retention || "Standard (5 Years)";
 
   return (
     <div className="space-y-6">
@@ -1014,17 +1093,28 @@ export function DocumentDetailView({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {doc.status?.toLowerCase() === "draft" && (
+            <button
+              onClick={onOpenVersionModal}
+              className="border border-blue-600 bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded flex items-center gap-1 font-medium cursor-pointer shadow-sm transition-colors"
+            >
+              <Upload size={14} /> Upload New Version
+            </button>
+          )}
           <button
-            onClick={onOpenVersionModal}
-            className="border border-blue-600 bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded flex items-center gap-1 font-medium cursor-pointer shadow-sm transition-colors"
-          >
-            <Upload size={14} /> Upload New Version
-          </button>
-          <button
-            onClick={() => alert(`Downloading ${doc.number}`)}
+            onClick={() => {
+              if (versions.length > 0) {
+                handleDownloadVersion(
+                  versions[0].versionId,
+                  versions[0].fileName,
+                );
+              } else {
+                alert(`Downloading latest record for ${doc.number}`);
+              }
+            }}
             className="border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs px-3 py-1.5 rounded flex items-center gap-1 font-medium cursor-pointer"
           >
-            <Download size={14} /> Download
+            <Download size={14} /> Download Latest
           </button>
           {/* <button
             onClick={() => alert(`Editing ${doc.number}`)}
@@ -1127,18 +1217,76 @@ export function DocumentDetailView({
               )}
             </div>
             <div className="grid grid-cols-12 gap-6">
-              <div className="col-span-12 lg:col-span-5">
-                <PdfViewer
-                  pdfUrl={doc.fileUrl}
-                  docTitle={doc.title}
-                  docNumber={doc.number}
-                  totalPages={doc.totalPages}
-                  status={doc.status}
+              <div className="col-span-12 lg:col-span-5 relative bg-slate-100 rounded-lg overflow-hidden border border-slate-200">
+                {/* Clean Semi-Transparent Watermark Overlay */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                  <span className="text-4xl md:text-5xl font-black text-slate-400/20 rotate-[-30deg] uppercase tracking-widest select-none">
+                    {doc.status || "CONFIDENTIAL"}
+                  </span>
+                </div>
+
+                <DynamicPdfViewer
+                  documentId={doc?.documentId || doc?.id}
+                  versionId={doc?.currentVersionId}
+                  docTitle={doc?.title}
+                  docNumber={doc?.number}
+                  totalPages={doc?.totalPages}
+                  status={doc?.status}
                 />
+              </div>
+              <div className="col-span-12 lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-6 text-xs bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
+                <div className="space-y-3">
+                  <h3 className="font-bold text-slate-800 text-sm border-b pb-1">
+                    Document Metadata
+                  </h3>
+                  <InfoRow label="Document Number" value={doc.number} />
+                  <InfoRow label="Type" value={doc.type} />
+                  <InfoRow
+                    label="Status"
+                    value={
+                      <span
+                        className={`px-2 py-0.5 rounded font-semibold text-[10px] ${doc.statusColor}`}
+                      >
+                        {doc.status}
+                      </span>
+                    }
+                  />
+                  <InfoRow label="Current Version" value={doc.version} />
+                  <InfoRow label="Owner" value={doc.owner} />
+                  <InfoRow
+                    label="Effective Date"
+                    value={formatApiDate(doc.effectiveDate)}
+                  />
+                  <InfoRow
+                    label="Review Date"
+                    value={formatApiDate(doc.reviewDate)}
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="font-bold text-slate-800 text-sm border-b pb-1">
+                    Governance Specs
+                  </h3>
+                  <InfoRow
+                    label="Classification"
+                    value={mappedClassification}
+                  />
+                  <InfoRow label="Retention Period" value={mappedRetention} />
+                  <InfoRow label="Category" value={mappedCategory} />
+                  <InfoRow label="Department" value={mappedDepartment} />
+                  <InfoRow
+                    label="Created On"
+                    value={formatApiDate(doc.createdOn)}
+                  />
+                  <InfoRow
+                    label="Last Modified"
+                    value={formatApiDate(doc.date)}
+                  />
+                </div>
               </div>
 
               {/* Quick Info Grid */}
-              <div className="col-span-12 lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-6 text-xs bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
+              {/* <div className="col-span-12 lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-6 text-xs bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
                 <div className="space-y-3">
                   <h3 className="font-bold text-slate-800 text-sm border-b pb-1">
                     Document Metadata
@@ -1172,7 +1320,7 @@ export function DocumentDetailView({
                   <InfoRow label="Created On" value={doc.createdOn} />
                   <InfoRow label="Last Modified On" value={doc.date} />
                 </div>
-              </div>
+              </div> */}
             </div>
 
             {/* Stepper Workflow Progress Widget */}
@@ -1249,7 +1397,7 @@ export function DocumentDetailView({
         )}
 
         {/* VERSIONS TAB */}
-        {activeTab === "Versions" && (
+        {/* {activeTab === "Versions" && (
           <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-sm text-xs">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-slate-800 text-sm mb-4">
@@ -1290,6 +1438,96 @@ export function DocumentDetailView({
                 </tbody>
               </table>
             </div>
+          </div>
+        )} */}
+        {activeTab === "Versions" && (
+          <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-sm text-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-slate-800 text-sm">
+                Revision History
+              </h3>
+              <button
+                onClick={onOpenVersionModal}
+                className="border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs px-3 py-1.5 rounded flex items-center gap-1.5 font-semibold cursor-pointer transition-colors"
+              >
+                <Upload size={13} /> Add New Version
+              </button>
+            </div>
+
+            {isVersionsLoading ? (
+              <div className="p-8 text-center text-slate-500 flex items-center justify-center gap-2">
+                <Loader2 size={16} className="animate-spin text-blue-600" />
+                Loading dynamic version entries...
+              </div>
+            ) : versionsError ? (
+              <div className="p-4 text-center text-red-500">
+                {versionsError}
+              </div>
+            ) : versions.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50 text-slate-600">
+                      <th className="p-2.5">Version</th>
+                      <th className="p-2.5">Date Created</th>
+                      <th className="p-2.5">Created By</th>
+                      <th className="p-2.5">Reason</th>
+                      <th className="p-2.5">Change Summary</th>
+                      <th className="p-2.5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {versions.map((v, idx) => {
+                      const isLatest = idx === 0;
+                      return (
+                        <tr
+                          key={v.versionId}
+                          className={
+                            isLatest ? "bg-blue-50/40" : "hover:bg-slate-50"
+                          }
+                        >
+                          <td className="p-2.5 font-bold text-blue-700">
+                            v{v.versionNo} {isLatest && "(Current)"}
+                          </td>
+                          <td className="p-2.5 text-slate-600">
+                            {formatApiDate(v.createdAt)}
+                          </td>
+                          <td className="p-2.5 text-slate-600">
+                            User #{v.createdBy}
+                          </td>
+                          <td className="p-2.5 text-slate-600 font-medium">
+                            {v.changeReason || "N/A"}
+                          </td>
+                          <td className="p-2.5 text-slate-600">
+                            {v.changeSummary || "No summary provided"}
+                          </td>
+                          <td className="p-2.5 text-right">
+                            <button
+                              disabled={downloadingVersionId === v.versionId}
+                              onClick={() =>
+                                handleDownloadVersion(v.versionId, v.fileName)
+                              }
+                              className="text-blue-600 font-semibold hover:underline cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
+                            >
+                              {downloadingVersionId === v.versionId ? (
+                                <Loader2 size={12} className="animate-spin" />
+                              ) : (
+                                <Download size={12} />
+                              )}
+                              Download
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-slate-400 py-4 text-center">
+                No version entries found.
+              </p>
+            )}
           </div>
         )}
 
@@ -1402,7 +1640,7 @@ export function DocumentDetailView({
         )}
 
         {/* AUDIT TRAIL TAB */}
-        {activeTab === "Audit Trail" && (
+        {/* {activeTab === "Audit Trail" && (
           <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-sm text-xs space-y-4">
             <h3 className="font-bold text-slate-800 text-sm">
               System Audit Activity
@@ -1415,6 +1653,65 @@ export function DocumentDetailView({
                   {doc.createdOn} - by {doc.owner}
                 </p>
               </div>
+            </div>
+          </div>
+        )} */}
+        {/* AUDIT TRAIL TAB */}
+        {activeTab === "Audit Trail" && (
+          <div className="bg-white p-6 rounded-lg border border-slate-200 shadow-sm text-xs space-y-4">
+            <h3 className="font-bold text-slate-800 text-sm">
+              System Audit Activity
+            </h3>
+
+            <div className="space-y-4 border-l-2 border-slate-200 pl-4 ml-2">
+              {/* 1. Base Document Creation Entry (First event) */}
+              <div className="relative">
+                <span className="absolute -left-[21px] top-0 w-2.5 h-2.5 rounded-full bg-blue-500" />
+                <p className="font-semibold text-slate-800">Document Created</p>
+                <p className="text-slate-500 text-[11px]">
+                  {doc.createdOn} - by {doc.owner}
+                </p>
+              </div>
+
+              {/* 2. Document Version Uploads in Chronological Order (Oldest to Newest) */}
+              {[...versions].reverse().map((v) => (
+                <div key={v.versionId} className="relative">
+                  <span className="absolute -left-[21px] top-0 w-2.5 h-2.5 rounded-full bg-blue-500" />
+                  <p className="font-semibold text-slate-800">
+                    Document Version v{v.versionNo} Uploaded
+                  </p>
+                  <p className="text-slate-500 text-[11px]">
+                    {formatApiDate(v.createdAt)} - by User #{v.createdBy} (
+                    {v.changeReason})
+                  </p>
+                  <p className="text-slate-600 text-[11px] italic mt-0.5">
+                    "{v.changeSummary}"
+                  </p>
+                </div>
+              ))}
+
+              {/* 3. Workflow Actions */}
+              {workflowRequest?.levels?.map((lvl) =>
+                lvl.approvers
+                  ?.filter((a) => a.actionOn)
+                  .map((a, idx) => (
+                    <div key={idx} className="relative">
+                      <span className="absolute -left-[21px] top-0 w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                      <p className="font-semibold text-slate-800">
+                        Workflow Stage: {lvl.levelName} ({lvl.status})
+                      </p>
+                      <p className="text-slate-500 text-[11px]">
+                        {formatApiDate(a.actionOn)} - Action taken by User #
+                        {a.userId}
+                      </p>
+                      {a.comments && (
+                        <p className="text-slate-600 text-[11px] mt-0.5">
+                          Comment: {a.comments}
+                        </p>
+                      )}
+                    </div>
+                  )),
+              )}
             </div>
           </div>
         )}
@@ -1513,6 +1810,11 @@ export default function DocumentManagementModule() {
             docName: doc.title || "Untitled Document",
             docNo: doc.documentNo || `DOC-${doc.documentId}`,
             workflow: `Org ID: ${doc.organizationId || 1}`,
+            currentVersionId:
+              doc.currentVersionId ||
+              doc.request?.currentVersionId ||
+              doc.versions?.[0]?.versionId ||
+              1,
             due: doc.createdAt
               ? new Date(doc.createdAt).toLocaleDateString()
               : "N/A",
@@ -1696,9 +1998,11 @@ export default function DocumentManagementModule() {
             title:
               selectedDoc.title || selectedDoc.docName || "Untitled Document",
             // Normalize dynamic Version format
-            currentVersion: selectedDoc.version?.startsWith("v")
-              ? selectedDoc.version
-              : `v${selectedDoc.version || "1.0"}`,
+            currentVersion: String(selectedDoc?.currentVersionId || "")
+              .trim()
+              .startsWith("v")
+              ? String(selectedDoc.currentVersionId)
+              : `v${selectedDoc?.currentVersionId ?? "1.0"}`,
             // Normalize dynamic Type
             documentType: selectedDoc.type || selectedDoc.category || "General",
           }}
