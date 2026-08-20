@@ -22,6 +22,7 @@ import DocumentManagementModule, {
 import { UploadDocumentView } from "./components/UploadDocumentView";
 import { DocumentVersionUploadModal } from "./components/DocumentVersionUploadModal";
 import { TasksView } from "./components/TasksView";
+import WorkflowManager from "./components/WorkflowManager";
 
 // Helper function to dynamically generate route slugs
 const createReportConfig = (title, index) => {
@@ -102,7 +103,7 @@ function App() {
     isAuthenticated ? children : <Navigate to="/login" replace />;
 
   const RequireAdmin = ({ children }) =>
-    isAdmin ? children : <Navigate to="/dashboard/project-budgeting" replace />;
+    isAdmin ? children : <Navigate to="/dashboard/home" replace />;
 
   if (import.meta.env.VITE_CHECK === "production") {
     console.log = () => {};
@@ -236,6 +237,16 @@ function App() {
                 // <RequireAdmin>
                 <div className="mt-12 ml-2">
                   <TasksView />
+                </div>
+                // </RequireAdmin>
+              }
+            />
+            <Route
+              path="manage-workflows"
+              element={
+                // <RequireAdmin>
+                <div className="mt-12 ml-2">
+                  <WorkflowManager />
                 </div>
                 // </RequireAdmin>
               }

@@ -625,9 +625,9 @@ export function DocumentsView({
           >
             <Plus size={16} /> New Document
           </button>
-          <button className="border border-slate-200 text-slate-600 p-2 rounded-md hover:bg-slate-50">
+          {/* <button className="border border-slate-200 text-slate-600 p-2 rounded-md hover:bg-slate-50">
             <MoreVertical size={16} />
-          </button>
+          </button> */}
         </div>
       </div>
 
