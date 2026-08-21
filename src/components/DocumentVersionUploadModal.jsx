@@ -109,13 +109,10 @@ export function DocumentVersionUploadModal({
         ? backendUrlGrc
         : `${backendUrlGrc}/`;
 
-      const response = await fetch(
-        `${baseUrl}api/documents/${docId}/upload/new_version`,
-        {
-          method: "POST",
-          body: formData,
-        },
-      );
+      const response = await fetch(`${baseUrl}api/documents/${docId}/upload`, {
+        method: "POST",
+        body: formData,
+      });
 
       if (!response.ok) {
         throw new Error(`Upload failed with status ${response.status}`);
