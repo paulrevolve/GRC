@@ -29,6 +29,8 @@ import {
 } from "./config";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import mammoth from "mammoth/mammoth.browser";
+import * as XLSX from "xlsx";
 
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { Client } from "@microsoft/microsoft-graph-client";
@@ -1209,7 +1211,7 @@ const SHAREPOINT_DRIVE_ID = "YOUR_SHAREPOINT_DRIVE_ID";
 export function UploadDocumentView({
   onCancel,
   onSubmitSuccess,
-  currentUser,
+  userId,
   showBackButton = false,
 }) {
   const { instance, accounts } = useMsal();
@@ -1225,9 +1227,9 @@ export function UploadDocumentView({
     classificationId: "",
     organizationId: "",
     departmentId: "",
-    ownerUserId: currentUser?.userId || 1,
+    ownerUserId: userId,
     status: "DRAFT",
-    createdBy: currentUser?.userId || 1,
+    createdBy: userId,
   });
 
   const [uploadedFile, setUploadedFile] = useState(null);
@@ -1238,6 +1240,51 @@ export function UploadDocumentView({
   const [documentTypeOptions, setDocumentTypeOptions] = useState([]);
   const [selectedBackendType, setSelectedBackendType] = useState(null);
   const [isLoadingTypes, setIsLoadingTypes] = useState(false);
+
+  const normalizeDate = (value) => {
+    if (!value) return "";
+
+    const cleaned = value.trim();
+
+    // Already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) {
+      return cleaned;
+    }
+
+    // DD-MMM-YYYY
+    const match = cleaned.match(
+      /^(\d{1,2})[-\/ ]([A-Za-z]{3,9})[-\/ ](\d{4})$/,
+    );
+
+    if (match) {
+      const day = match[1].padStart(2, "0");
+      const monthName = match[2].substring(0, 3).toLowerCase();
+      const year = match[3];
+
+      const months = {
+        jan: "01",
+        feb: "02",
+        mar: "03",
+        apr: "04",
+        may: "05",
+        jun: "06",
+        jul: "07",
+        aug: "08",
+        sep: "09",
+        oct: "10",
+        nov: "11",
+        dec: "12",
+      };
+
+      const month = months[monthName];
+
+      if (month) {
+        return `${year}-${month}-${day}`;
+      }
+    }
+
+    return value;
+  };
 
   // const activeConfig = useMemo(() => {
   //   return (
@@ -1282,6 +1329,75 @@ export function UploadDocumentView({
   //   setSelectedTypeKey(key);
   //   setFormData({ currency: "USD", tags: [] });
   // };
+
+  const extractDocumentText = async (file) => {
+    if (!file) {
+      throw new Error("No file provided.");
+    }
+
+    const extension = file.name.split(".").pop().toLowerCase();
+
+    console.log(`Extracting text from .${extension} file...`);
+
+    switch (extension) {
+      // =========================
+      // PDF
+      // =========================
+      case "pdf": {
+        return await extractPdfText(file);
+      }
+
+      // =========================
+      // DOCX
+      // =========================
+      case "docx": {
+        const arrayBuffer = await file.arrayBuffer();
+
+        const result = await mammoth.extractRawText({
+          arrayBuffer,
+        });
+
+        if (result.messages?.length) {
+          console.warn("DOCX extraction messages:", result.messages);
+        }
+
+        return result.value || "";
+      }
+
+      // =========================
+      // XLSX / XLS
+      // =========================
+      case "xlsx":
+      case "xls": {
+        const arrayBuffer = await file.arrayBuffer();
+
+        const workbook = XLSX.read(arrayBuffer, {
+          type: "array",
+        });
+
+        let fullText = "";
+
+        workbook.SheetNames.forEach((sheetName) => {
+          const worksheet = workbook.Sheets[sheetName];
+
+          const sheetText = XLSX.utils.sheet_to_csv(worksheet, {
+            blankrows: false,
+          });
+
+          fullText += `\n===== SHEET: ${sheetName} =====\n`;
+          fullText += sheetText;
+          fullText += "\n";
+        });
+
+        return fullText.trim();
+      }
+
+      default:
+        throw new Error(
+          `Text extraction is not supported for .${extension} files.`,
+        );
+    }
+  };
 
   const handleTypeChange = (e) => {
     const key = e.target.value;
@@ -1482,18 +1598,100 @@ export function UploadDocumentView({
       setIsExtracting(false);
     }
   };
+
+  const processDocumentAndMapFields = async (file) => {
+    try {
+      setIsExtracting(true);
+
+      const text = await extractDocumentText(file);
+
+      console.log("========== EXTRACTED DOCUMENT TEXT ==========");
+      console.log(text);
+      console.log("==============================================");
+
+      let extracted = {};
+
+      switch (selectedTypeKey) {
+        case "POLICY":
+          extracted = parsePolicyMetadata(text);
+          break;
+
+        case "CONTRACT":
+          extracted = parseContractMetadata(text);
+          break;
+
+        case "INVOICE":
+          extracted = parseInvoiceMetadata(text);
+          break;
+
+        default:
+          console.warn(`No parser configured for ${selectedTypeKey}`);
+          break;
+      }
+
+      console.log("========== EXTRACTED METADATA ==========");
+      console.log(extracted);
+      console.log("=========================================");
+
+      // Dynamically map extracted fields
+      setFormData((prev) => {
+        const updated = { ...prev };
+
+        activeConfig.fields.forEach((field) => {
+          const value = extracted[field.name];
+
+          if (value !== undefined && value !== null && value !== "") {
+            updated[field.name] = value;
+          }
+        });
+
+        return updated;
+      });
+    } catch (error) {
+      console.error("Failed to extract document metadata:", error);
+    } finally {
+      setIsExtracting(false);
+    }
+  };
   // Process File selection
+  // const processSelectedFile = async (file) => {
+  //   if (!file) return;
+
+  //   const allowedExtensions = activeConfig.allowedFiles
+  //     .split(",")
+  //     .map((ext) => ext.trim().toLowerCase());
+  //   const fileExtension = "." + file.name.split(".").pop().toLowerCase();
+
+  //   if (!allowedExtensions.includes(fileExtension)) {
+  //     alert(
+  //       `Invalid file type. Allowed extensions for ${activeConfig.label}: ${activeConfig.allowedFiles}`,
+  //     );
+  //     return;
+  //   }
+
+  //   setUploadedFile({
+  //     rawFile: file,
+  //     name: file.name,
+  //     size: file.size,
+  //     extension: fileExtension.replace(".", "").toUpperCase(),
+  //   });
+
+  //   if (fileExtension === ".pdf") {
+  //     await processPdfAndMapFields(file);
+  //   }
+  // };
   const processSelectedFile = async (file) => {
     if (!file) return;
 
     const allowedExtensions = activeConfig.allowedFiles
       .split(",")
       .map((ext) => ext.trim().toLowerCase());
+
     const fileExtension = "." + file.name.split(".").pop().toLowerCase();
 
     if (!allowedExtensions.includes(fileExtension)) {
       alert(
-        `Invalid file type. Allowed extensions for ${activeConfig.label}: ${activeConfig.allowedFiles}`,
+        `Invalid file type. Allowed extensions: ${activeConfig.allowedFiles}`,
       );
       return;
     }
@@ -1505,9 +1703,122 @@ export function UploadDocumentView({
       extension: fileExtension.replace(".", "").toUpperCase(),
     });
 
-    if (fileExtension === ".pdf") {
-      await processPdfAndMapFields(file);
+    // PDF / Word / Excel
+    if (
+      fileExtension === ".pdf" ||
+      fileExtension === ".docx" ||
+      fileExtension === ".xlsx" ||
+      fileExtension === ".xls"
+    ) {
+      await processDocumentAndMapFields(file);
     }
+  };
+
+  const parsePolicyMetadata = (text) => {
+    const parsed = {};
+
+    // Normalize whitespace but preserve line boundaries
+    const cleanText = text.replace(/\r/g, "").replace(/[ \t]+/g, " ");
+
+    const getValue = (regex) => {
+      const match = cleanText.match(regex);
+      return match ? match[1].trim() : "";
+    };
+
+    parsed.policyNumber = getValue(/Policy\s+Number\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.policyTitle = getValue(/Policy\s+Title\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.department = getValue(/Department\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.policyOwner = getValue(/Policy\s+Owner\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.effectiveDate = getValue(/Effective\s+Date\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.reviewDate = getValue(/Review\s+Date\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.version = getValue(/Version\s*[:\-]\s*(v?[\d.]+)/i);
+
+    parsed.approvedBy = getValue(/Approved\s+By\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.approvalDate = getValue(/Approval\s+Date\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.policyType = getValue(/Policy\s+Type\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.applicability = getValue(/Applicability\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.relatedPolicy = getValue(/Related\s+Policy\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.confidentialityLevel = getValue(
+      /Confidentiality\s+Level\s*[:\-]\s*([^\n]+)/i,
+    );
+
+    const tags = getValue(/Tags\s*[:\-]\s*([^\n]+)/i);
+
+    if (tags) {
+      parsed.tags = tags
+        .split(/[,;]+/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+    }
+
+    return parsed;
+  };
+
+  const parseContractMetadata = (text) => {
+    const parsed = {};
+
+    const cleanText = text.replace(/\r/g, "").replace(/[ \t]+/g, " ");
+
+    const getValue = (regex) => {
+      const match = cleanText.match(regex);
+      return match ? match[1].trim() : "";
+    };
+
+    parsed.contractNumber = getValue(/Contract\s+Number\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.contractTitle = getValue(/Contract\s+Title\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.counterparty = getValue(/Counterparty\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.contractType = getValue(/Contract\s+Type\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.effectiveDate = getValue(/Effective\s+Date\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.expirationDate = getValue(/Expiration\s+Date\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.contractValue = getValue(
+      /Contract\s+Value\s*[:\-]\s*(?:[A-Z]{3}\s*)?([\d,]+(?:\.\d+)?)/i,
+    );
+
+    parsed.currency = getValue(/Currency\s*[:\-]\s*([A-Z]{3})/i);
+
+    parsed.department = getValue(/Department\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.businessOwner = getValue(/Business\s+Owner\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.paymentTerms = getValue(/Payment\s+Terms\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.renewalTerms = getValue(/Renewal\s+Terms\s*[:\-]\s*([^\n]+)/i);
+
+    parsed.confidentialityLevel = getValue(
+      /Confidentiality\s+Level\s*[:\-]\s*([^\n]+)/i,
+    );
+
+    parsed.governingLaw = getValue(/Governing\s+Law\s*[:\-]\s*([^\n]+)/i);
+
+    const tags = getValue(/Tags\s*[:\-]\s*([^\n]+)/i);
+
+    if (tags) {
+      parsed.tags = tags
+        .split(/[,;]+/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+    }
+
+    parsed.description = getValue(/Description\s*[:\-]\s*([^\n]+)/i);
+
+    return parsed;
   };
 
   const handleFileChange = async (e) => {

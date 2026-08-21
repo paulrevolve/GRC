@@ -1961,6 +1961,7 @@ export default function DocumentManagementModule() {
           onCancel={handleBackToList}
           showBackButton={true}
           onSubmitSuccess={handleBackToList}
+          userId={userId}
         />
       )}
 
