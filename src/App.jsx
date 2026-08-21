@@ -23,6 +23,8 @@ import { UploadDocumentView } from "./components/UploadDocumentView";
 import { DocumentVersionUploadModal } from "./components/DocumentVersionUploadModal";
 import { TasksView } from "./components/TasksView";
 import WorkflowManager from "./components/WorkflowManager";
+import { DashboardView } from "./components/DashboardView";
+import { GrcHome } from "./components/HomePage";
 
 // Helper function to dynamically generate route slugs
 const createReportConfig = (title, index) => {
@@ -176,7 +178,7 @@ function App() {
               element={
                 // <RequireAdmin>
                 <div className="mt-12 ml-2">
-                  <DocGovApp />
+                  <GrcHome />
                 </div>
                 // </RequireAdmin>
               }
