@@ -132,7 +132,7 @@ function TopBar({ onLogout }) {
               title="View Profile Details"
             >
               <div className="w-7 h-7 rounded-full bg-white  text-[#17414d] flex items-center justify-center font-bold text-xs border border-blue-400/30 shadow-inner group-hover:scale-105 transition-transform duration-150">
-                {userName.charAt(0).toUpperCase()}
+                {fullName.charAt(0).toUpperCase()}
               </div>
             </button>
 
@@ -196,10 +196,10 @@ function TopBar({ onLogout }) {
                     {/* Centered Avatar Badge info */}
                     <div className="flex flex-col items-center py-3 bg-gray-50 rounded-xl border border-gray-100">
                       <div className="w-12 h-12 rounded-full bg-[#17414d] text-white flex items-center justify-center text-lg font-bold mb-1.5 shadow-sm">
-                        {userName.charAt(0).toUpperCase()}
+                        {fullName.charAt(0).toUpperCase()}
                       </div>
                       <h3 className="text-sm font-bold text-gray-800">
-                        {userName}
+                        {fullName}
                       </h3>
                       <span className="px-2 py-0.5 text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full mt-0.5">
                         {userRole}
@@ -217,7 +217,7 @@ function TopBar({ onLogout }) {
                           User Name
                         </span>
                         <span className="text-[11px] text-gray-800 font-mono font-medium">
-                          {userName}
+                          {fullName}
                         </span>
                       </div>
 
@@ -226,7 +226,7 @@ function TopBar({ onLogout }) {
                           Full Name
                         </span>
                         <span className="text-[11px] text-gray-800 font-medium">
-                          {userName}
+                          {fullName}
                         </span>
                       </div>
                     </div>

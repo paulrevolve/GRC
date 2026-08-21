@@ -684,7 +684,7 @@ export function DocumentsView({
             <option value="PENDING">Pending</option>
           </select>
 
-          <select
+          {/* <select
             value={selectedOwner}
             onChange={(e) => setSelectedOwner(e.target.value)}
             className="border border-slate-200 rounded px-3 py-1.5 text-slate-600 bg-white"
@@ -697,7 +697,7 @@ export function DocumentsView({
                 {owner}
               </option>
             ))}
-          </select>
+          </select> */}
         </div>
 
         <button

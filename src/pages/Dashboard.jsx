@@ -22,92 +22,92 @@ const Dashboard = () => {
   const userId = user?.userId || user?.id;
   const defaultWorkspaceName = import.meta.env.VITE_WORKSPACE_NAME || "";
 
-  const loadConfig = async () => {
-    setLoading(true);
-    try {
-      const currentUserString = localStorage.getItem("currentUser") || "{}";
-      const currentUserObj = JSON.parse(currentUserString);
-      const userRole = (currentUserObj.role || "").toUpperCase();
-      const token = currentUserObj.token ?? "";
+  // const loadConfig = async () => {
+  //   setLoading(true);
+  //   try {
+  //     const currentUserString = localStorage.getItem("currentUser") || "{}";
+  //     const currentUserObj = JSON.parse(currentUserString);
+  //     const userRole = (currentUserObj.role || "").toUpperCase();
+  //     const token = currentUserObj.token ?? "";
 
-      // A. Prepare network promises with inline error handling
-      const biReportPromise = axios
-        .get(`${backendUrl}/api/PowerBI/BiReport_List`, {
-          params: { workspaceName: defaultWorkspaceName },
-        })
-        .catch((err) => {
-          console.warn("PowerBI report list request failed:", err);
-          return { data: [] }; // Return fallback object so Promise.all continues
-        });
+  //     // A. Prepare network promises with inline error handling
+  //     const biReportPromise = axios
+  //       .get(`${backendUrl}/api/PowerBI/BiReport_List`, {
+  //         params: { workspaceName: defaultWorkspaceName },
+  //       })
+  //       .catch((err) => {
+  //         console.warn("PowerBI report list request failed:", err);
+  //         return { data: [] }; // Return fallback object so Promise.all continues
+  //       });
 
-      const reportGroupsPromise = axios.get(`${backendUrl}/api/ReportGroups`);
+  //     const reportGroupsPromise = axios.get(`${backendUrl}/api/ReportGroups`);
 
-      let permPromise = Promise.resolve(null);
-      if (user?.userId) {
-        permPromise = axios.get(
-          // `${backendUrl}/api/SecurityAccess/GetUserPermissionsV1/${user.userId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        );
-      }
+  //     let permPromise = Promise.resolve(null);
+  //     if (user?.userId) {
+  //       permPromise = axios.get(
+  //         // `${backendUrl}/api/SecurityAccess/GetUserPermissionsV1/${user.userId}`,
+  //         {
+  //           headers: {
+  //             Authorization: `Bearer ${token}`,
+  //           },
+  //         },
+  //       );
+  //     }
 
-      // B. Execute all requests concurrently
-      const [permRes, biRes, groupsRes] = await Promise.all([
-        permPromise,
-        biReportPromise,
-        reportGroupsPromise,
-      ]);
+  //     // B. Execute all requests concurrently
+  //     const [permRes, biRes, groupsRes] = await Promise.all([
+  //       // permPromise,
+  //       // biReportPromise,
+  //       // reportGroupsPromise,
+  //     ]);
 
-      // C. Process Visibility Data
-      if (userRole === "AD") {
-        setVisibility({});
-      } else if (permRes?.data) {
-        const data = permRes.data || {};
-        const mergedVisibility = {
-          ...(data.screens || {}),
-          ...(data.fields || {}),
-        };
-        setVisibility(mergedVisibility);
-      } else {
-        setVisibility({});
-      }
+  //     // C. Process Visibility Data
+  //     if (userRole === "AD") {
+  //       setVisibility({});
+  //     } else if (permRes?.data) {
+  //       const data = permRes.data || {};
+  //       const mergedVisibility = {
+  //         ...(data.screens || {}),
+  //         ...(data.fields || {}),
+  //       };
+  //       setVisibility(mergedVisibility);
+  //     } else {
+  //       setVisibility({});
+  //     }
 
-      // D. Process & Format BI Reports List
-      const rawBiData = Array.isArray(biRes?.data) ? biRes.data : [];
-      const formattedBiReports = rawBiData.map((item) => {
-        const reportName = item.datasetName || item.name || "Unnamed Report";
-        const reportId = item.reportId || item.id || reportName;
+  //     // D. Process & Format BI Reports List
+  //     const rawBiData = Array.isArray(biRes?.data) ? biRes.data : [];
+  //     const formattedBiReports = rawBiData.map((item) => {
+  //       const reportName = item.datasetName || item.name || "Unnamed Report";
+  //       const reportId = item.reportId || item.id || reportName;
 
-        return {
-          id: String(reportId),
-          label: reportName,
-          path: `/dashboard/report/${reportId}`,
-          ...item,
-        };
-      });
-      setBiReports(formattedBiReports);
+  //       return {
+  //         id: String(reportId),
+  //         label: reportName,
+  //         path: `/dashboard/report/${reportId}`,
+  //         ...item,
+  //       };
+  //     });
+  //     setBiReports(formattedBiReports);
 
-      // E. Process Report Groups Data
-      const rawGroupsData = Array.isArray(groupsRes?.data)
-        ? groupsRes.data
-        : [];
-      setReportGroups(rawGroupsData);
-    } catch (e) {
-      console.error("Error loading dashboard configuration data:", e);
-      setVisibility({});
-    } finally {
-      setLoading(false);
-    }
-  };
+  //     // E. Process Report Groups Data
+  //     const rawGroupsData = Array.isArray(groupsRes?.data)
+  //       ? groupsRes.data
+  //       : [];
+  //     setReportGroups(rawGroupsData);
+  //   } catch (e) {
+  //     console.error("Error loading dashboard configuration data:", e);
+  //     setVisibility({});
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
-  useEffect(() => {
-    if (!user?.userId) return;
+  // useEffect(() => {
+  //   if (!user?.userId) return;
 
-    loadConfig();
-  }, [user?.userId]);
+  //   loadConfig();
+  // }, [user?.userId]);
 
   // 2. Parse User Metadata & Handle Auth Redirection
   useEffect(() => {
@@ -218,7 +218,7 @@ const Dashboard = () => {
               reportGroups,
               canView,
               canEdit,
-              loadConfig,
+              // loadConfig,
             }}
           />
         </div>

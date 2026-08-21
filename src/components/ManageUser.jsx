@@ -12,7 +12,7 @@
 // //   Square,
 // //   RefreshCw,
 // // } from "lucide-react";
-// // import { backendUrl } from "./config";
+// // import { backendUrlGrc } from "./config";
 // // import { useOutletContext } from "react-router-dom";
 // // import { toast } from "react-toastify";
 
@@ -137,7 +137,7 @@
 // //   const fetchRoles = async () => {
 // //     setLoadingRoles(true);
 // //     try {
-// //       const response = await axios.get(`${backendUrl}/api/Roles`);
+// //       const response = await axios.get(`${backendUrlGrc}/api/Roles`);
 // //       const apiData = Array.isArray(response.data) ? response.data : [];
 
 // //       const mappedRoles = apiData.map((item) => ({
@@ -161,7 +161,7 @@
 
 // //     try {
 // //       const mappingRes = await axios.get(
-// //         `${backendUrl}/api/SecurityAccess/GetUserPermissionsV1/${userId}`,
+// //         `${backendUrlGrc}/api/SecurityAccess/GetUserPermissionsV1/${userId}`,
 // //       );
 
 // //       const mappedData = mappingRes.data?.data || mappingRes.data;
@@ -226,7 +226,7 @@
 // //   //   setLoadingReports(true);
 // //   //   try {
 // //   //     const response = await axios.get(
-// //   //       `${backendUrl}/api/PowerBI/BiReport_List`,
+// //   //       `${backendUrlGrc}/api/PowerBI/BiReport_List`,
 // //   //       {
 // //   //         params: { workspaceName: workspace },
 // //   //       },
@@ -271,7 +271,7 @@
 // //     if (!roleId) return [];
 // //     try {
 // //       const res = await axios.get(
-// //         `${backendUrl}/api/SecurityAccess/role-permissions/${roleId}`,
+// //         `${backendUrlGrc}/api/SecurityAccess/role-permissions/${roleId}`,
 // //       );
 // //       const screensData = res.data?.data?.screens || res.data?.screens;
 // //       const activeCodes = extractActiveScreenCodes(screensData);
@@ -327,7 +327,7 @@
 // //       );
 // //       const currentUserId = loggedInUser.userId || loggedInUser.id;
 
-// //       const response = await axios.get(`${backendUrl}/api/User`);
+// //       const response = await axios.get(`${backendUrlGrc}/api/User`);
 // //       const rawUserList = response.data?.data || response.data || [];
 // //       const validUserList = Array.isArray(rawUserList) ? rawUserList : [];
 
@@ -477,7 +477,7 @@
 // //         };
 
 // //         const userRes = await axios.put(
-// //           `${backendUrl}/api/User/${editingUserId}`,
+// //           `${backendUrlGrc}/api/User/${editingUserId}`,
 // //           updatePayload,
 // //         );
 // //         savedUser = userRes.data?.data ||
@@ -514,7 +514,7 @@
 // //         };
 
 // //         const userRes = await axios.post(
-// //           `${backendUrl}/api/User`,
+// //           `${backendUrlGrc}/api/User`,
 // //           createPayload,
 // //         );
 // //         savedUser = userRes.data?.data || userRes.data || createPayload;
@@ -540,7 +540,7 @@
 // //         };
 
 // //         await axios.post(
-// //           `${backendUrl}/api/SecurityAccess/user-permissions/bulk`,
+// //           `${backendUrlGrc}/api/SecurityAccess/user-permissions/bulk`,
 // //           bulkPermissionsPayload,
 // //         );
 // //       }
@@ -597,7 +597,7 @@
 // //   //   try {
 // //   //     // 1. Fetch user permissions directly from the Security API
 // //   //     const mappingRes = await axios.get(
-// //   //       `${backendUrl}/api/SecurityAccess/GetUserPermissionsV1/${user.userId}`
+// //   //       `${backendUrlGrc}/api/SecurityAccess/GetUserPermissionsV1/${user.userId}`
 // //   //     );
 
 // //   //     const mappedData = mappingRes.data?.data || mappingRes.data;
@@ -669,7 +669,7 @@
 // //   const handleDelete = async (id) => {
 // //     if (window.confirm("Are you sure you want to delete this user?")) {
 // //       try {
-// //         await axios.delete(`${backendUrl}/api/User/${id}`);
+// //         await axios.delete(`${backendUrlGrc}/api/User/${id}`);
 // //       } catch (err) {
 // //         console.warn("Delete API call failed, removing locally:", err);
 // //       }
@@ -716,7 +716,7 @@
 
 // //     try {
 // //       const response = await fetch(
-// //         `${backendUrl}/api/User/${selectedUserForPassword.userId}/reset-password`,
+// //         `${backendUrlGrc}/api/User/${selectedUserForPassword.userId}/reset-password`,
 // //         {
 // //           method: "PUT",
 // //           headers: { "Content-Type": "application/json" },
@@ -1183,7 +1183,7 @@
 //   RefreshCw,
 //   Loader2,
 // } from "lucide-react";
-// import { backendUrl } from "./config";
+// import { backendUrlGrc } from "./config";
 // import { useOutletContext } from "react-router-dom";
 // import { toast } from "react-toastify";
 
@@ -1322,7 +1322,7 @@
 //   const fetchRoles = async () => {
 //     setLoadingRoles(true);
 //     try {
-//       const response = await axios.get(`${backendUrl}/api/Roles`);
+//       const response = await axios.get(`${backendUrlGrc}/api/Roles`);
 //       const apiData = Array.isArray(response.data) ? response.data : [];
 
 //       const mappedRoles = apiData.map((item) => ({
@@ -1346,7 +1346,7 @@
 
 //     try {
 //       const mappingRes = await axios.get(
-//         `${backendUrl}/api/SecurityAccess/GetUserPermissionsV1/${userId}`,
+//         `${backendUrlGrc}/api/SecurityAccess/GetUserPermissionsV1/${userId}`,
 //       );
 
 //       const mappedData = mappingRes.data?.data || mappingRes.data;
@@ -1424,7 +1424,7 @@
 //     if (!roleId) return [];
 //     try {
 //       const res = await axios.get(
-//         `${backendUrl}/api/SecurityAccess/role-permissions/${roleId}`,
+//         `${backendUrlGrc}/api/SecurityAccess/role-permissions/${roleId}`,
 //       );
 //       const screensData = res.data?.data?.screens || res.data?.screens;
 //       const activeCodes = extractActiveScreenCodes(screensData);
@@ -1481,7 +1481,7 @@
 //       );
 //       const currentUserId = loggedInUser.userId || loggedInUser.id;
 
-//       const response = await axios.get(`${backendUrl}/api/document-governance/users`);
+//       const response = await axios.get(`${backendUrlGrc}/api/document-governance/users`);
 //       const rawUserList = response.data?.data || response.data || [];
 //       const validUserList = Array.isArray(rawUserList) ? rawUserList : [];
 
@@ -1675,7 +1675,7 @@
 //         };
 
 //         const userRes = await axios.put(
-//           `${backendUrl}/api/User/${editingUserId}`,
+//           `${backendUrlGrc}/api/User/${editingUserId}`,
 //           updatePayload,
 //         );
 //         savedUser = userRes.data?.data ||
@@ -1712,7 +1712,7 @@
 //         };
 
 //         const userRes = await axios.post(
-//           `${backendUrl}/api/document-governance/users`,
+//           `${backendUrlGrc}/api/document-governance/users`,
 //           createPayload,
 //         );
 //         savedUser = userRes.data?.data || userRes.data || createPayload;
@@ -1788,7 +1788,7 @@
 //   const handleDelete = async (id) => {
 //     if (window.confirm("Are you sure you want to delete this user?")) {
 //       try {
-//         await axios.delete(`${backendUrl}/api/User/${id}`);
+//         await axios.delete(`${backendUrlGrc}/api/User/${id}`);
 //       } catch (err) {
 //         console.warn("Delete API call failed, removing locally:", err);
 //       }
@@ -1844,7 +1844,7 @@
 
 //     try {
 //       const response = await fetch(
-//         `${backendUrl}/api/User/${selectedUserForPassword.userId}/reset-password`,
+//         `${backendUrlGrc}/api/User/${selectedUserForPassword.userId}/reset-password`,
 //         {
 //           method: "PUT",
 //           headers: { "Content-Type": "application/json" },
@@ -2261,8 +2261,7 @@ import {
   RefreshCw,
   Loader2,
 } from "lucide-react";
-import { backendUrl } from "./config";
-import { useOutletContext } from "react-router-dom";
+import { backendUrlGrc } from "./config";
 import { toast } from "react-toastify";
 
 // --- Validation helpers ---
@@ -2279,8 +2278,6 @@ const isValidUsername = (username) =>
 const isStrongPassword = (password) => PASSWORD_REGEX.test(String(password));
 
 export default function ManageUsers() {
-  const { biReports = [] } = useOutletContext();
-
   // Form State
   const [userNameInput, setUserNameInput] = useState("");
   const [userFullNameInput, setUserFullNameInput] = useState("");
@@ -2318,11 +2315,12 @@ export default function ManageUsers() {
   const fetchRoles = async () => {
     setLoadingRoles(true);
     try {
-      const response = await axios.get(`${backendUrl}/api/Roles`);
+      const response = await axios.get(`${backendUrlGrc}/api/Roles`);
       const apiData = Array.isArray(response.data) ? response.data : [];
 
       const mappedRoles = apiData.map((item) => ({
         id: item.roleId,
+        code: item.roleCode,
         name: item.roleName,
       }));
 
@@ -2340,7 +2338,7 @@ export default function ManageUsers() {
   const fetchDepartments = async () => {
     setLoadingDepartments(true);
     try {
-      const response = await axios.get(`${backendUrl}/api/Department`);
+      const response = await axios.get(`${backendUrlGrc}/api/Department`);
       const apiData = Array.isArray(response.data) ? response.data : [];
 
       const mappedDepartments = apiData.map((item) => ({
@@ -2369,7 +2367,7 @@ export default function ManageUsers() {
     try {
       setLoading(true);
       const response = await axios.get(
-        `${backendUrl}/api/document-governance/users`,
+        `${backendUrlGrc}/api/document-governance/users`,
       );
       const rawUserList = response.data?.data || response.data || [];
       setUsers(Array.isArray(rawUserList) ? rawUserList : []);
@@ -2468,7 +2466,7 @@ export default function ManageUsers() {
         };
 
         await axios.put(
-          `${backendUrl}/api/document-governance/users/${editingUserId}`,
+          `${backendUrlGrc}/api/document-governance/users/${editingUserId}`,
           updatePayload,
         );
         toast.success("User updated successfully!");
@@ -2486,7 +2484,7 @@ export default function ManageUsers() {
         };
 
         await axios.post(
-          `${backendUrl}/api/document-governance/users`,
+          `${backendUrlGrc}/api/document-governance/users`,
           createPayload,
         );
         toast.success("User created successfully!");
@@ -2530,7 +2528,9 @@ export default function ManageUsers() {
   const handleDelete = async (id) => {
     if (window.confirm("Are you sure you want to delete this user?")) {
       try {
-        await axios.delete(`${backendUrl}/api/document-governance/users/${id}`);
+        await axios.delete(
+          `${backendUrlGrc}/api/document-governance/users/${id}`,
+        );
         fetchUsers();
         if (editingUserId === id) resetForm();
         toast.success("User deleted successfully.");
@@ -2583,7 +2583,7 @@ export default function ManageUsers() {
 
     try {
       await axios.post(
-        `${backendUrl}/api/document-governance/users/${selectedUserForPassword.userId}/reset-password`,
+        `${backendUrlGrc}/api/document-governance/users/${selectedUserForPassword.userId}/reset-password`,
         { newPassword: trimmedNewPassword },
       );
 
